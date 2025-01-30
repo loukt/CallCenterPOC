@@ -4,6 +4,8 @@ using Azure.AI.OpenAI;
 using Azure;
 using CallCenterCoreAPI.Models;
 using CallCenterCoreAPI.Services;
+using Swashbuckle.AspNetCore.Swagger;
+using Swashbuckle.AspNetCore.SwaggerUI;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,16 +21,8 @@ builder.Services.AddLogging(logging =>
     logging.AddDebug();
 });
 
-//option1
-//builder.Services.AddSingleton<RealtimeAudioService>();
-
-//option2
-//builder.Services.AddSingleton<AcsMediaStreamingHandler>();
-//builder.Services.AddSingleton<AzureOpenAIService>();
 
 builder.Services.AddSingleton<CallService>();
-
-
 
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -50,6 +44,9 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+app.UseSwagger();
+app.UseSwaggerUI();
+
 app.UseWebSockets();
 
 app.UseStaticFiles();
@@ -59,5 +56,8 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 
 app.MapControllers();
+
+app.Urls.Add("https://+:8081");
+app.Urls.Add("http://+:8080");
 
 app.Run();

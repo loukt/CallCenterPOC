@@ -1,0 +1,5 @@
+{
+    "appService.preDeployTask": "publish-release",
+    "appService.deploySubpath": "CallCenterCoreAPI\\bin\\Release\\net9.0\\publish",
+    "appService.defaultWebAppToDeploy": "/subscriptions/d34886f7-4c88-49fb-aca6-f14869664c96/resourceGroups/ContactCenterPOC/providers/Microsoft.Web/sites/contactcenter-poc-api"
+}
