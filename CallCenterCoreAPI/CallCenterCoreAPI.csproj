@@ -9,6 +9,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Models\CallSettings.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Azure.AI.OpenAI" Version="2.1.0-beta.2" />
     <PackageReference Include="Azure.Communication.CallAutomation" Version="1.4.0-beta.1" />
     <PackageReference Include="Azure.Communication.Identity" Version="1.3.1" />
@@ -24,6 +28,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="Properties\PublishProfiles\" />
     <Folder Include="wwwroot\Media\" />
   </ItemGroup>
 
