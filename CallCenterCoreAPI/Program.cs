@@ -1,8 +1,3 @@
-
-
-using Azure.AI.OpenAI;
-using Azure;
-using CallCenterCoreAPI.Models;
 using CallCenterCoreAPI.Services;
 
 var builder = WebApplication.CreateBuilder(args);

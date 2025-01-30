@@ -1,19 +1,12 @@
 ﻿using Azure.Communication.CallAutomation;
 using Azure.Messaging;
-using CallCenterCoreAPI.Models;
-using CallCenterCoreAPI.Services;
+using ContactCenterPOC.Models;
+using ContactCenterPOC.Services;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.EventGrid.Models;
-using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
-using System.Linq.Expressions;
-using System.Net.WebSockets;
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using Windows.Media.Devices;
 
-namespace CallCenterCoreAPI.Controllers
+
+namespace ContactCenterPOC.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]

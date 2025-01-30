@@ -1,11 +1,11 @@
 ﻿using Azure;
 using Azure.Communication;
 using Azure.Communication.CallAutomation;
-using CallCenterCoreAPI.Models;
+using ContactCenterPOC.Models;
 using System.Net.WebSockets;
 
 
-namespace CallCenterCoreAPI.Services
+namespace ContactCenterPOC.Services
 {
     public class CallService
     {

@@ -1,0 +1,21 @@
+﻿@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Home page";
+}
+
+<div class="text-center">
+    <h1 class="display-4">Welcome</h1>
+    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+</div>
+
+<div class="form-group">
+    <label for="phoneNumber">Phone Number</label>
+    <input type="text" id="phoneNumber" class="form-control" placeholder="Enter phone number" />
+</div>
+
+<div class="form-group">
+    <label for="promptBox">Prompt or context </label>
+    <textarea id="promptBox" class="form-control" rows="5" placeholder="You are an AI Assitant"></textarea>
+</div>
+<button class="btn btn-primary" onclick="MakeCall" disabled="isCalling">Call</button>
