@@ -1,0 +1,6 @@
+@CallCenterAPI_HostAddress = http://localhost:5150
+
+GET {{CallCenterAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,0 +1,27 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.35527.113
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CallCenterCoreAPI", "CallCenterCoreAPI\CallCenterCoreAPI.csproj", "{7A8F7258-8E89-4376-8101-D9B27542569E}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{223DE851-5A50-4D28-A633-2F469BE9BC90}"
+	ProjectSection(SolutionItems) = preProject
+		.editorconfig = .editorconfig
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7A8F7258-8E89-4376-8101-D9B27542569E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7A8F7258-8E89-4376-8101-D9B27542569E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7A8F7258-8E89-4376-8101-D9B27542569E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7A8F7258-8E89-4376-8101-D9B27542569E}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
