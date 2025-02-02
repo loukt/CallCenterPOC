@@ -26,18 +26,14 @@ namespace ContactCenterPOC.Controllers
         [HttpPost("test-call")]
         public async Task<IActionResult> TestCall([FromBody] string phoneNumber)
         {
-            
-            //try
-            //{
+            try
+            {
                 // Initiate test call
-                var callId = await _callService.InitiateCall(phoneNumber,HttpContext);
-            await _callService.StartCallInteraction(callId, HttpContext);
-
-            return Ok(new { CallId=callId });
+                var callId = await _callService.InitiateCall(phoneNumber,null,HttpContext);
+                //var callId = await _callService.InitiateCall("+6597507515", HttpContext);
                 // Start realtime conversation
-               //await _callService.StartCallInteraction(callId);
-
-             /*   return Ok(new
+                await _callService.StartCallInteraction(callId, HttpContext);
+                return Ok(new
                 {
                     CallId = callId,
                     Status = "Call initiated successfully",
@@ -52,7 +48,7 @@ namespace ContactCenterPOC.Controllers
                     Error = "Failed to initiate test call",
                     Message = ex.Message
                 });
-            }*/
+            }
         }
     }
 

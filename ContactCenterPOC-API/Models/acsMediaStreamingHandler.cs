@@ -25,7 +25,7 @@ namespace ContactCenterPOC.Models
         }
 
         // Method to receive messages from WebSocket
-        public async Task ProcessWebSocketAsync()
+        public async Task ProcessWebSocketAsync(string callContextPrompt)
         {
             
             if (m_webSocket == null)
@@ -34,7 +34,35 @@ namespace ContactCenterPOC.Models
             }
 
             // start forwarder to AI model
-            m_aiServiceHandler = new AzureOpenAIService(this, m_configuration,_logger);
+            m_aiServiceHandler = new AzureOpenAIService(this,callContextPrompt, m_configuration,_logger);
+
+            try
+            {
+                m_aiServiceHandler.StartConversation();
+                await StartReceivingFromAcsMediaWebSocket();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogInformation($" at MediaStreamHandler Process websocket Exception -> {ex}");
+            }
+            finally
+            {
+                m_aiServiceHandler.Close();
+                this.Close();
+            }
+        }
+
+
+        public async Task ProcessWebSocketAsync()
+        {
+
+            if (m_webSocket == null)
+            {
+                return;
+            }
+
+            // start forwarder to AI model
+            m_aiServiceHandler = new AzureOpenAIService(this, m_configuration, _logger);
 
             try
             {

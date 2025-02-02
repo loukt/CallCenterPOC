@@ -16,4 +16,9 @@
         public string ResultSubcode { get; set; }
     }
 
+    public class CallRequest {
+        public string PhoneNumber { get; set; }
+        public string Prompt { get; set; }
+
+    }
 }

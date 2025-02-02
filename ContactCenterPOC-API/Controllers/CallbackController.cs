@@ -1,5 +1,6 @@
 ﻿using Azure.Communication.CallAutomation;
 using Azure.Messaging;
+using Azure.Messaging.EventGrid;
 using ContactCenterPOC.Models;
 using ContactCenterPOC.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -21,64 +22,49 @@ namespace ContactCenterPOC.Controllers
             _callService = callService;
         }
 
-        [HttpPost("events")]
-        public async Task<IActionResult> HandleCallbackEvent([FromBody] CallbackEvent callbackEvent)
-        {
-            _logger.LogInformation($"Received event: {callbackEvent.EventType} for call {callbackEvent.CallConnectionId}");
-
-            switch (callbackEvent.EventType)
-            {
-                case "Microsoft.Communication.CallConnected":
-                    await HandleCallConnected(callbackEvent);
-                    break;
-
-                case "Microsoft.Communication.CallDisconnected":
-                    await HandleCallDisconnected(callbackEvent);
-                    break;
-
-                case "Microsoft.Communication.PlayCompleted":
-                    await HandlePlaybackCompleted(callbackEvent);
-                    break;
-            }
-
-            return Ok();
-        }
-
+        
        
-
+        //For all callbacks goes through here
         [HttpPost]
         public async Task<IActionResult> CallbackEvent([FromBody] CloudEvent[] callbackEvents)
         {
             _logger.LogInformation($"WE HAVE AN EVENT A CALL BACK !!! !!!!");
-            CallAutomationEventProcessor processor = _callService.CallAutomationClient.GetEventProcessor();
-            processor.ProcessEvents(callbackEvents);
-
-            foreach (var callbackEvent in callbackEvents)
-            {
-
-                CallAutomationEventBase @event = CallAutomationEventParser.Parse(callbackEvent);
-                _logger.LogInformation($"Event received: {JsonConvert.SerializeObject(@event, Formatting.Indented)}");
-                //_logger.LogInformation($"Received event Line 1: Id {callbackEvent.Id} for Subject {callbackEvent.Subject}");
-
-                //               _logger.LogInformation($"Received event Line 2: Type {callbackEvent.Type} for datascehema {callbackEvent.DataSchema}");
-
-                //             _logger.LogInformation($"Received event Line 3: Data Content Type {callbackEvent.DataContentType} for Data {callbackEvent.Data}");
-            }
+            //CallAutomationEventProcessor processor = _callService.CallAutomationClient.GetEventProcessor();
+            //processor.ProcessEvents(callbackEvents);
 
             
+            foreach (var callbackEvent in callbackEvents)
+            {
+                CallAutomationEventBase @event = CallAutomationEventParser.Parse(callbackEvent);
+                _logger.LogInformation($"Event received: {JsonConvert.SerializeObject(@event, Formatting.Indented)}");
+
+                if (callbackEvent.Type.Contains("CallConnected"))
+                {
+                    _logger.LogInformation($"Activating recording");
+                    await _callService.startRecordingAsync(@event.ServerCallId);
+                }
+                else if (callbackEvent.Type.Contains("CallDisconnected"))
+                {
+                    _logger.LogInformation($"CallDisconnecting");
+                    await HandleCallDisconnected(@event.CallConnectionId,@event.ServerCallId);
+                }
+                
+            }
 
             return Ok();
         }
 
+
+        //websocket handling the live with agent
         [HttpGet("ws")]
-        public async Task<IActionResult> Get()
+        public async Task<IActionResult> Get(string targetNumber)
         {
-            
+            if(!targetNumber.Contains("+"))targetNumber = "+" + targetNumber.Replace(" ","");
             if (HttpContext.WebSockets.IsWebSocketRequest)
             {
                 _logger.LogInformation($"Callback triggered on WS It's rerouted to the websocket AND WORKING");
 
-                await _callService.StartCallInteraction(HttpContext);
+                await _callService.StartCallInteraction(HttpContext,targetNumber);
             }
             else
             {
@@ -97,10 +83,10 @@ namespace ContactCenterPOC.Controllers
             await _callService.StartCallInteraction(callbackEvent.CallConnectionId,HttpContext);
         }
 
-        private async Task HandleCallDisconnected(CallbackEvent callbackEvent)
+        private async Task HandleCallDisconnected(string callId, string servercallId)
         {
             // Cleanup resources
-            await _callService.CleanupCall(callbackEvent.CallConnectionId);
+            await _callService.CleanupCall(callId, servercallId);
         }
 
         private async Task HandlePlaybackCompleted(CallbackEvent callbackEvent)
@@ -108,7 +94,7 @@ namespace ContactCenterPOC.Controllers
             await _callService.HandlePlaybackCompleted(callbackEvent.CallConnectionId);
         }
 
-
+        
 
     }
 

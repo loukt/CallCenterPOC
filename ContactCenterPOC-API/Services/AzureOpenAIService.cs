@@ -23,14 +23,23 @@ namespace ContactCenterPOC.Services
         {
             m_mediaStreaming = mediaStreaming;
             m_cts = new CancellationTokenSource();
-            m_aiSession = CreateAISessionAsync(configuration).GetAwaiter().GetResult();
+            m_aiSession = CreateAISessionAsync(configuration, null).GetAwaiter().GetResult();
             m_memoryStream = new MemoryStream();
             _logger = logger;
         }
 
-        
+        public AzureOpenAIService(AcsMediaStreamingHandler mediaStreaming, string prompt, IConfiguration configuration, ILogger<CallService> logger)
+        {
+            m_mediaStreaming = mediaStreaming;
+            m_cts = new CancellationTokenSource();
+            m_aiSession = CreateAISessionAsync(configuration, prompt).GetAwaiter().GetResult();
+            m_memoryStream = new MemoryStream();
+            _logger = logger;
+        }
 
-        private async Task<RealtimeConversationSession> CreateAISessionAsync(IConfiguration configuration)
+
+
+        private async Task<RealtimeConversationSession> CreateAISessionAsync(IConfiguration configuration, string prompt)
         {
 
             var openAiKey = configuration["AzureOpenAI:Key"];
@@ -41,11 +50,20 @@ namespace ContactCenterPOC.Services
 
             var openAiModelName = configuration["AzureOpenAI:DeploymentName"];// configuration.GetValue<string>("AzureOpenAIDeploymentModelName");
             ArgumentNullException.ThrowIfNullOrEmpty(openAiModelName);
-            var systemPrompt = configuration["AzureOpenAI:SystemPrompt"];// configuration.GetValue<string>("SystemPrompt") ?? m_answerPromptSystemTemplate;
-            ArgumentNullException.ThrowIfNullOrEmpty(systemPrompt);
-
-            var aiClient = new AzureOpenAIClient(new Uri(openAiUri), new ApiKeyCredential(openAiKey));
+            string systemPrompt = prompt;
+            if (systemPrompt == null)
+            {
+                systemPrompt = configuration["AzureOpenAI:SystemPrompt"];// configuration.GetValue<string>("SystemPrompt") ?? m_answerPromptSystemTemplate;
+                ArgumentNullException.ThrowIfNullOrEmpty(systemPrompt);
+            }
+            var credentials = new ApiKeyCredential(openAiKey);
+            if (credentials == null)
+            {
+                throw new ArgumentNullException(nameof(credentials), "Failed to create ApiKeyCredential.");
+            }
+            var aiClient = new AzureOpenAIClient(new Uri(openAiUri), credentials);
             var RealtimeCovnClient = aiClient.GetRealtimeConversationClient(openAiModelName);
+            
             var session = await RealtimeCovnClient.StartConversationSessionAsync();
 
             // Session options control connection-wide behavior shared across all conversations,

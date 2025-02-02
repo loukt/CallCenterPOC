@@ -16,8 +16,10 @@ namespace ContactCenterPOC.Services
         private readonly string _callbackUri;
         private readonly ILogger<CallService> _logger;
         private AcsMediaStreamingHandler _acsMediaStreamingHandler;
-        //private readonly RealtimeAudioService _realtimeAudioService;
         private readonly Dictionary<string, CallConnection> _activeConnections;
+        private readonly Dictionary<string, string> _activeCallPrompt;
+        private readonly Dictionary<string, string> _activeCallNumbers;
+        private readonly Dictionary<string, string> _activeRecordings;
         private Response<CreateCallResult> _createCallResult;
         private readonly IConfiguration _configuration ;
 
@@ -26,14 +28,18 @@ namespace ContactCenterPOC.Services
             _logger = logger; 
             _configuration = configuration;
             var connectionString = configuration["AzureCommunicationServices:ConnectionString"];
+            _callbackUri = _configuration["CallbackUrl"];
             _callAutomationClient = new CallAutomationClient(connectionString);
             _callerPhoneNumber = new PhoneNumberIdentifier( configuration["AzureCommunicationServices:PhoneNumber"]);
-            _callbackUri = configuration["CallbackUrl"];
             _activeConnections = new Dictionary<string, CallConnection>();
+            _activeRecordings = new Dictionary<string, string>();
+            _activeCallPrompt = new Dictionary<string, string>();
+            _activeCallNumbers = new Dictionary<string, string>();
         }
 
-        public async Task<string> InitiateCall(string targetPhoneNumber, HttpContext httpContext)
+        public async Task<string> InitiateCall(string targetPhoneNumber,string callContextPrompt, HttpContext httpContext)
         {
+            
             // Create the call participants
             _targetPhoneNumber = new PhoneNumberIdentifier(targetPhoneNumber);
             // Create the call invite
@@ -43,11 +49,8 @@ namespace ContactCenterPOC.Services
             var callbackUri = new Uri(_callbackUri);
             // Initiate the call with correct parameters
 
-            var callOptions = new CreateCallOptions(callInvite, callbackUri) {
-                //CallIntelligenceOptions = new CallIntelligenceOptions() {  CognitiveServicesEndpoint = new Uri(_cogServiceUri) }, //"https://ys-aoai-sweden.openai.azure.com") },
-                //TranscriptionOptions = new TranscriptionOptions(new Uri(_cogServiceUri), "en-US", false, TranscriptionTransport.Websocket)
-            };
-            var wssuri = new Uri(_callbackUri.Replace("https", "wss") + "/ws");
+            var callOptions = new CreateCallOptions(callInvite, callbackUri);
+            var wssuri = new Uri(_callbackUri.Replace("https", "wss") + "/ws?targetNumber="+targetPhoneNumber);
             var mediaStreamingOptions = new MediaStreamingOptions(
                 wssuri,
                 MediaStreamingContent.Audio,
@@ -60,33 +63,15 @@ namespace ContactCenterPOC.Services
             };
             callOptions.MediaStreamingOptions = mediaStreamingOptions;
             _createCallResult = await _callAutomationClient.CreateCallAsync(callOptions);
+            var callConnectionId = _createCallResult.Value.CallConnection.CallConnectionId;
+            _activeConnections[callConnectionId] = _createCallResult.Value.CallConnection;
+            _activeCallPrompt[callConnectionId] = callContextPrompt;
+            _activeCallNumbers[targetPhoneNumber] = callConnectionId;
             return _createCallResult.Value.CallConnection.CallConnectionId;
         }
-        
 
 
-        public async Task StartCallInteraction(string callConnectionId, HttpContext context)
-        {
-            var callConnection = _callAutomationClient.GetCallConnection(callConnectionId);
-            _activeConnections[callConnectionId] = callConnection;
-
-
-            //trigger with call create Result
-            //var eventResult = await _createCallResult.Value.WaitForEventProcessorAsync();
-            //CallConnected returnedEvent = eventResult.SuccessResult;
-
-            // Initialize GPT-4o Realtime session
-
-            //if (context.WebSockets.IsWebSocketRequest)
-            //  StartCallInteraction4(context).Wait();  
-
-            // Start capturing audio from the call
-            //var mediaSession = callConnection.GetCallMedia();
-
-        }
-
-
-        public async Task StartCallInteraction(HttpContext httpContext)
+        public async Task StartCallInteraction(string callId, HttpContext httpContext)
         {
             if (httpContext.WebSockets.IsWebSocketRequest)
             {
@@ -98,24 +83,45 @@ namespace ContactCenterPOC.Services
                 if (ws.State == WebSocketState.Open)
                 {
                     //var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
-
-                
-                    _acsMediaStreamingHandler = new AcsMediaStreamingHandler(ws, _configuration,_logger );
-                    await _acsMediaStreamingHandler.ProcessWebSocketAsync();
+                    _acsMediaStreamingHandler = new AcsMediaStreamingHandler(ws, _configuration, _logger);
+                    await _acsMediaStreamingHandler.ProcessWebSocketAsync(_activeCallPrompt[callId]);
                 }
             }
             else
             {
-                _logger.LogInformation("Not a WebSocket request :" +httpContext.Response.StatusCode ); 
+                _logger.LogInformation("Not a WebSocket request :" + httpContext.Response.StatusCode);
                 _logger.LogInformation("Not a WebSocket request");
-            
+
             }
         }
 
-        
+        public async Task StartCallInteraction( HttpContext httpContext, string targetNumber)
+        {
+            if (httpContext.WebSockets.IsWebSocketRequest)
+            {
+                var ws = await httpContext.WebSockets.AcceptWebSocketAsync();
+                // Accept the WebSocket connection
+                _logger.LogInformation("There is WebSocket connected");
+
+                // Handle incoming messages (or process streaming)
+                if (ws.State == WebSocketState.Open)
+                {
+                    //var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+                    _acsMediaStreamingHandler = new AcsMediaStreamingHandler(ws, _configuration, _logger);
+                    var callConnectionId = _activeCallNumbers[targetNumber];
+                    await _acsMediaStreamingHandler.ProcessWebSocketAsync(_activeCallPrompt[callConnectionId]);
+                }
+            }
+            else
+            {
+                _logger.LogInformation("Not a WebSocket request :" + httpContext.Response.StatusCode);
+                _logger.LogInformation("Not a WebSocket request");
+
+            }
+        }
 
 
-        public async Task StartCallInteraction2(string callConnectionId)
+        public async Task StartCallInteractionToPlaySound(string callConnectionId)
         {
             
             // Create a call connection client
@@ -176,10 +182,11 @@ namespace ContactCenterPOC.Services
 
         }
 
-        public async Task CleanupCall(string callConnectionId)
+        public async Task CleanupCall(string callConnectionId, string serverCallId)
         {
             // Implement cleanup logic
             _logger.LogInformation($"Call {callConnectionId} disconnected, cleaning up resources");
+            await stopRecordingAsync(serverCallId);
         }
 
 
@@ -197,5 +204,32 @@ namespace ContactCenterPOC.Services
 
             await callConnection.GetCallMedia().StartRecognizingAsync(recognizeOptions);
         }
+
+
+        public async Task startRecordingAsync(String serverCallId)
+        {
+            var callConnection = _callAutomationClient.GetCallConnection(serverCallId);
+            StartRecordingOptions recordingOptions = new StartRecordingOptions(new ServerCallLocator(serverCallId)) {
+                RecordingChannel = RecordingChannel.Mixed,
+                RecordingContent = RecordingContent.Audio,
+                RecordingFormat = RecordingFormat.Mp3,
+                RecordingStorage = RecordingStorage.CreateAzureBlobContainerRecordingStorage(new Uri(_configuration["BlobContainer"]))
+            };
+            
+            var startRecordingResponse = await _callAutomationClient.GetCallRecording().StartAsync(recordingOptions).ConfigureAwait(false);
+            _activeRecordings[serverCallId] = startRecordingResponse.Value.RecordingId;
+        }
+
+        public async Task stopRecordingAsync(String serverCallId)
+        {
+            try {
+
+                await _callAutomationClient.GetCallRecording().StopAsync(_activeRecordings[serverCallId]);
+
+            } catch (Exception e) { }
+        }
+
+
+
     }
 }
