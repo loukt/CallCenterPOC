@@ -1,7 +1,7 @@
-# CallCenterPOC
+# AI CallCenter - Virtual Agent
 
 ## Introduction
-CallCenterPOC is a proof-of-concept project written in C# that demonstrates the implementation of a call center application. This project is divided into two main parts: CallCenterCoreAPI and CallCenterPOC-App.
+This project is a proof-of-concept project written in C# that demonstrates the implementation of a call center application. This project is divided into two main parts: CallCenterCoreAPI and CallCenterPOC-App.
 
 ## Repository Structure
 - **CallCenterCoreAPI**: This folder contains the core API for the call center application.
