@@ -9,7 +9,7 @@
         <div class="col-md-6">
             <div class="card">
                 <div class="card-header">
-                    <h2 class="text-center">Call Center AI</h2>
+                    <h2 class="text-center">AI Call Center - Virtual Agent</h2>
                 </div>
                 <div class="card-body">
                     <form method="post" id="callForm">
@@ -30,13 +30,32 @@
                         </div>
 
                         <div class="text-center">
-                            <button type="submit" class="btn btn-primary" id="initiateCall" >
-                                <i class="fas fa-phone-alt me-2"></i>Call
+                            <button type="submit" class="btn btn-primary" disabled="@Model.IsCalling" id="initiateCall">
+                                <i class="fas fa-phone-alt me-2">Make a Call</i>
                             </button>
                         </div>
+                        <div class="form-group mb-3">
+                            <label for="selectPrompt">Select a Prompt</label>
+                            <ul class="list-group">
+                                @foreach (var item in Model.PromptOptions)
+                                {
+                                    <li class="list-group-item" onclick="updatePrompt('@item.Content')">
+                                        @item.Title
+                                    </li>
+                                }
+                            </ul>
+                        </div>
                     </form>
+                 
+                    
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<script>
+    function updatePrompt(content) {
+        document.getElementById('prompt').value = content;
+    }
+</script>
