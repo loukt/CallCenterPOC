@@ -361,3 +361,5 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/ContactCenterPOC-API/myappsettings.json
+/CallCenterPOC-App/myappsettings.json
