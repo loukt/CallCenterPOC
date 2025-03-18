@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>ContactCenterPOC_API</RootNamespace>
+    <UserSecretsId>52693e95-9c42-480a-8d33-d6d182eb1b28</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

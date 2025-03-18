@@ -213,7 +213,8 @@ namespace ContactCenterPOC.Services
                 RecordingChannel = RecordingChannel.Mixed,
                 RecordingContent = RecordingContent.Audio,
                 RecordingFormat = RecordingFormat.Mp3,
-                RecordingStorage = RecordingStorage.CreateAzureBlobContainerRecordingStorage(new Uri(_configuration["BlobContainer"]))
+                RecordingStorage = RecordingStorage.CreateAzure
+                RecordingStorage(new Uri(_configuration["BlobContainer"]))
             };
             
             var startRecordingResponse = await _callAutomationClient.GetCallRecording().StartAsync(recordingOptions).ConfigureAwait(false);
