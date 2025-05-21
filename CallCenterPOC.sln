@@ -12,6 +12,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CallCenterPOC-App", "CallCe
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ContactCenterPOC-API", "ContactCenterPOC-API\ContactCenterPOC-API.csproj", "{F23520BB-B68E-4BAE-9C38-5DA2017EADEE}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RHB-Client-Test", "RHB-Client-Test\RHB-Client-Test.csproj", "{8A001AA6-5A32-4FE8-89D6-DFD81E10A96F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -26,8 +28,15 @@ Global
 		{F23520BB-B68E-4BAE-9C38-5DA2017EADEE}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F23520BB-B68E-4BAE-9C38-5DA2017EADEE}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F23520BB-B68E-4BAE-9C38-5DA2017EADEE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8A001AA6-5A32-4FE8-89D6-DFD81E10A96F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8A001AA6-5A32-4FE8-89D6-DFD81E10A96F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8A001AA6-5A32-4FE8-89D6-DFD81E10A96F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8A001AA6-5A32-4FE8-89D6-DFD81E10A96F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {3373A5C2-6FCF-49C3-80F4-DA0506A4C2D4}
 	EndGlobalSection
 EndGlobal
