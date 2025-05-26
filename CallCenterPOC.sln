@@ -14,6 +14,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ContactCenterPOC-API", "Con
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RHB-Client-Test", "RHB-Client-Test\RHB-Client-Test.csproj", "{8A001AA6-5A32-4FE8-89D6-DFD81E10A96F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ContactCenterPOC-API-v2", "ContactCenterPOC-API - v2\ContactCenterPOC-API-v2.csproj", "{1E597269-20D1-A58A-4A7A-0D103ED02975}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -32,6 +34,10 @@ Global
 		{8A001AA6-5A32-4FE8-89D6-DFD81E10A96F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8A001AA6-5A32-4FE8-89D6-DFD81E10A96F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8A001AA6-5A32-4FE8-89D6-DFD81E10A96F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1E597269-20D1-A58A-4A7A-0D103ED02975}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1E597269-20D1-A58A-4A7A-0D103ED02975}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1E597269-20D1-A58A-4A7A-0D103ED02975}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1E597269-20D1-A58A-4A7A-0D103ED02975}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
