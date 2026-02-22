@@ -1,5 +1,8 @@
 ﻿using Azure.Communication.CallAutomation;
+using ContactCenterPOC.Hubs;
 using ContactCenterPOC.Services;
+using Microsoft.AspNetCore.SignalR;
+using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using System.Text;
 
@@ -13,15 +16,33 @@ namespace ContactCenterPOC.Models
         private AzureOpenAIService m_aiServiceHandler;
         private IConfiguration m_configuration;
         private readonly ILogger<CallService> _logger;
+        private readonly IHubContext<TranscriptHub> _hubContext;
+        private readonly string _callConnectionId;
+        private readonly Func<string, Task>? _hangUpCallback;
+        private readonly SentimentAnalysisService? _sentimentService;
+        private readonly ConcurrentDictionary<string, ActiveCall>? _activeCalls;
 
-        // Constructor to inject OpenAIClient
-        public AcsMediaStreamingHandler(WebSocket webSocket, IConfiguration configuration,ILogger<CallService> logger)
+        // Constructor to inject OpenAIClient, SignalR hub context, and call connection ID
+        public AcsMediaStreamingHandler(
+            WebSocket webSocket,
+            IConfiguration configuration,
+            ILogger<CallService> logger,
+            IHubContext<TranscriptHub> hubContext,
+            string callConnectionId,
+            Func<string, Task>? hangUpCallback = null,
+            SentimentAnalysisService? sentimentService = null,
+            ConcurrentDictionary<string, ActiveCall>? activeCalls = null)
         {
             m_webSocket = webSocket;
             m_configuration = configuration;
             m_buffer = new MemoryStream();
             m_cts = new CancellationTokenSource();
             _logger = logger;
+            _hubContext = hubContext;
+            _callConnectionId = callConnectionId;
+            _hangUpCallback = hangUpCallback;
+            _sentimentService = sentimentService;
+            _activeCalls = activeCalls;
         }
 
         // Method to receive messages from WebSocket
@@ -34,7 +55,7 @@ namespace ContactCenterPOC.Models
             }
 
             // start forwarder to AI model
-            m_aiServiceHandler = new AzureOpenAIService(this,callContextPrompt, m_configuration,_logger);
+            m_aiServiceHandler = new AzureOpenAIService(this, callContextPrompt, m_configuration, _logger, _hubContext, _callConnectionId, _hangUpCallback, _sentimentService, _activeCalls);
 
             try
             {
@@ -49,6 +70,19 @@ namespace ContactCenterPOC.Models
             {
                 m_aiServiceHandler.Close();
                 this.Close();
+
+                // Graceful call termination on WebSocket drop (T035)
+                if (_hangUpCallback != null)
+                {
+                    try
+                    {
+                        await _hangUpCallback(_callConnectionId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error during hang-up callback for call {CallConnectionId}", _callConnectionId);
+                    }
+                }
             }
         }
 
@@ -62,7 +96,7 @@ namespace ContactCenterPOC.Models
             }
 
             // start forwarder to AI model
-            m_aiServiceHandler = new AzureOpenAIService(this, m_configuration, _logger);
+            m_aiServiceHandler = new AzureOpenAIService(this, m_configuration, _logger, _hubContext, _callConnectionId, _hangUpCallback, _sentimentService, _activeCalls);
 
             try
             {
@@ -77,6 +111,19 @@ namespace ContactCenterPOC.Models
             {
                 m_aiServiceHandler.Close();
                 this.Close();
+
+                // Graceful call termination on WebSocket drop (T035)
+                if (_hangUpCallback != null)
+                {
+                    try
+                    {
+                        await _hangUpCallback(_callConnectionId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error during hang-up callback for call {CallConnectionId}", _callConnectionId);
+                    }
+                }
             }
         }
 
@@ -121,6 +168,10 @@ namespace ContactCenterPOC.Models
                     }
                 }
             }
+            else
+            {
+                _logger.LogInformation("[MediaStream-{CallId}] Received non-audio streaming data: {Type}", _callConnectionId, input?.GetType().Name ?? "null");
+            }
         }
 
         // receive messages from WebSocket
@@ -132,21 +183,42 @@ namespace ContactCenterPOC.Models
             }
             try
             {
+                _logger.LogInformation("[MediaStream-{CallId}] Starting to receive from ACS media WebSocket (state={State})", _callConnectionId, m_webSocket.State);
+                var messageBuffer = new MemoryStream();
+                int messageCount = 0;
                 while (m_webSocket.State == WebSocketState.Open || m_webSocket.State == WebSocketState.Closed)
                 {
-                    byte[] receiveBuffer = new byte[2048];
+                    byte[] receiveBuffer = new byte[4096];
                     WebSocketReceiveResult receiveResult = await m_webSocket.ReceiveAsync(new ArraySegment<byte>(receiveBuffer), m_cts.Token);
 
-                    if (receiveResult.MessageType != WebSocketMessageType.Close)
+                    if (receiveResult.MessageType == WebSocketMessageType.Close)
                     {
-                        string data = Encoding.UTF8.GetString(receiveBuffer).TrimEnd('\0');
+                        _logger.LogInformation("[MediaStream-{CallId}] WebSocket close received after {Count} messages", _callConnectionId, messageCount);
+                        break;
+                    }
+
+                    // Write received bytes to message buffer
+                    messageBuffer.Write(receiveBuffer, 0, receiveResult.Count);
+
+                    // Only process when the full message has been received
+                    if (receiveResult.EndOfMessage)
+                    {
+                        messageCount++;
+                        if (messageCount <= 3 || messageCount % 100 == 0)
+                        {
+                            _logger.LogInformation("[MediaStream-{CallId}] ACS message #{Count} received ({ByteCount} bytes)", 
+                                _callConnectionId, messageCount, messageBuffer.Length);
+                        }
+                        string data = Encoding.UTF8.GetString(messageBuffer.ToArray()).TrimEnd('\0');
+                        messageBuffer.SetLength(0); // Reset buffer for next message
                         await WriteToAzOpenAIServiceInputStream(data);
                     }
                 }
+                _logger.LogInformation("[MediaStream-{CallId}] ACS WebSocket receive loop ended. Total messages: {Count}", _callConnectionId, messageCount);
             }
             catch (Exception ex)
             {
-                _logger.LogInformation($"Exception at start receiving from acs media socket -> {ex}");
+                _logger.LogError(ex, "[MediaStream-{CallId}] Exception in ACS media socket receive loop", _callConnectionId);
             }
         }
     }

@@ -1,0 +1,543 @@
+openapi: 3.0.3
+info:
+  title: Contact Center POC API
+  description: >
+    ASP.NET Core Web API for the Outbound Call Center POC.
+    Orchestrates outbound phone calls via Azure Communication Services
+    and bridges audio to Azure OpenAI Realtime API for AI-driven conversations.
+    Supports campaign management, real-time sentiment analysis, multi-number calling,
+    and call history with analytics.
+  version: 2.0.0
+
+servers:
+  - url: https://{host}
+    description: API base URL (ngrok tunnel or Azure deployment)
+    variables:
+      host:
+        default: localhost:5001
+
+paths:
+  /api/Call/initiate:
+    post:
+      operationId: initiateCall
+      summary: Initiate an outbound AI call
+      description: >
+        Places an outbound phone call to the specified number. Once connected,
+        an AI agent conducts a real-time voice conversation using the provided prompt.
+        Returns immediately after the call is placed (does not wait for connect).
+      tags: [Call]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CallRequest'
+            example:
+              phoneNumbers: ["+6591234567"]
+              campaignId: "loan-collections"
+              prompt: null
+      responses:
+        '200':
+          description: Call(s) initiated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallInitiatedResponse'
+        '400':
+          description: Validation error (invalid phone number or missing fields)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Invalid phone number"
+                message: "Phone number must be in E.164 format (e.g., +6591234567)"
+        '429':
+          description: Concurrent call limit reached (max 5)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Concurrent call limit reached"
+                message: "Maximum of 5 concurrent calls allowed. Please wait for an active call to end."
+        '500':
+          description: Internal error during call initiation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/Call/hangup/{callConnectionId}:
+    post:
+      operationId: hangUpCall
+      summary: Terminate an active call
+      description: >
+        Hangs up the specified active call, stops recording, and cleans up
+        all associated resources (AI session, WebSocket, recording).
+      tags: [Call]
+      parameters:
+        - name: callConnectionId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The ACS call connection ID returned from initiate
+      responses:
+        '200':
+          description: Call terminated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "Call terminated"
+                  callConnectionId:
+                    type: string
+        '404':
+          description: No active call found with this ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/Call/active:
+    get:
+      operationId: getActiveCalls
+      summary: List active calls
+      description: Returns the count and details of currently active calls.
+      tags: [Call]
+      responses:
+        '200':
+          description: Active call list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActiveCallsResponse'
+
+  /api/Campaign:
+    get:
+      operationId: listCampaigns
+      summary: List all campaigns
+      description: >
+        Returns all campaigns (pre-defined and custom). Pre-defined campaigns
+        have isDefault=true and cannot be deleted.
+      tags: [Campaign]
+      responses:
+        '200':
+          description: Campaign list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Campaign'
+    post:
+      operationId: createCampaign
+      summary: Create a custom campaign
+      description: >
+        Creates a new custom campaign with the specified title, description,
+        and AI behavior instructions. The campaign is persisted to Blob Storage
+        and available immediately for call initiation.
+      tags: [Campaign]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCampaignRequest'
+            example:
+              title: "Product Feedback"
+              description: "Collect feedback on recently purchased products"
+              aiBehaviorInstructions: "You are a friendly product feedback specialist..."
+      responses:
+        '201':
+          description: Campaign created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+        '400':
+          description: Validation error (missing fields or duplicate title)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Validation error"
+                message: "A campaign with this title already exists"
+
+  /api/CallHistory:
+    get:
+      operationId: listCallHistory
+      summary: List all previous calls
+      description: >
+        Returns a list of all completed calls with metadata. Sorted by most
+        recent first. Each entry includes phone number, campaign, duration,
+        overall sentiment, and timestamp.
+      tags: [CallHistory]
+      responses:
+        '200':
+          description: Call history list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CallHistorySummary'
+
+  /api/CallHistory/{callConnectionId}:
+    get:
+      operationId: getCallDetail
+      summary: Get detailed call record
+      description: >
+        Returns the full call record including transcript with per-segment
+        sentiment, speaker timeline, and aggregate analytics (sentiment
+        breakdown, talk-time ratio).
+      tags: [CallHistory]
+      parameters:
+        - name: callConnectionId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The ACS call connection ID of the completed call
+      responses:
+        '200':
+          description: Call detail with full transcript and analytics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallRecord'
+        '404':
+          description: No call record found with this ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/Callback:
+    post:
+      operationId: callbackEvent
+      summary: ACS event callback endpoint
+      description: >
+        Receives CloudEvent[] callbacks from Azure Communication Services
+        for call lifecycle events (CallConnected, CallDisconnected, etc.).
+        Not called by the frontend — called by ACS infrastructure.
+      tags: [Callback]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                description: CloudEvent from ACS
+      responses:
+        '200':
+          description: Events processed
+
+  /api/Callback/ws:
+    get:
+      operationId: mediaWebSocket
+      summary: ACS media streaming WebSocket
+      description: >
+        WebSocket endpoint for bidirectional audio streaming between ACS
+        and the API. Upgraded from HTTP by ACS when media streaming starts.
+        Not called by the frontend — called by ACS infrastructure.
+      tags: [Callback]
+      parameters:
+        - name: targetNumber
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Target phone number (used to correlate with active call)
+      responses:
+        '101':
+          description: WebSocket upgrade successful
+        '400':
+          description: Not a WebSocket request
+
+  /api/Test/test-call:
+    post:
+      operationId: testCall
+      summary: Quick test call (DEBUG builds only)
+      description: >
+        Dev shortcut to initiate a call with just a phone number and no prompt.
+        Uses the default system prompt from configuration.
+        **This endpoint is only available in DEBUG builds** (`#if DEBUG`).
+        It is excluded from API explorer and does not exist in Release builds.
+      tags: [Test]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: string
+            example: "+6591234567"
+      responses:
+        '200':
+          description: Test call initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallInitiatedResponse'
+        '500':
+          description: Error initiating test call
+
+  /transcriptHub:
+    get:
+      operationId: transcriptHubNegotiate
+      summary: SignalR hub for live transcript (negotiate)
+      description: >
+        SignalR hub endpoint. The frontend connects here to receive real-time
+        transcript updates and call status changes via SignalR protocol.
+        Supports WebSocket, SSE, and long-polling transports.
+      tags: [SignalR]
+      responses:
+        '200':
+          description: SignalR negotiate response
+
+components:
+  schemas:
+    CallRequest:
+      type: object
+      required: [phoneNumbers]
+      properties:
+        phoneNumbers:
+          type: array
+          items:
+            type: string
+            pattern: '^\+[1-9]\d{1,14}$'
+          minItems: 1
+          maxItems: 2
+          description: Target phone number(s) in E.164 format (1–2 numbers)
+          example: ["+6591234567"]
+        campaignId:
+          type: string
+          nullable: true
+          description: ID of the campaign to use. If null and prompt is null, uses default system prompt.
+          example: "loan-collections"
+        prompt:
+          type: string
+          nullable: true
+          description: Custom AI agent instructions. Overrides campaign instructions if provided.
+          example: "You are a friendly customer service representative."
+
+    CallInitiatedResponse:
+      type: object
+      properties:
+        calls:
+          type: array
+          items:
+            type: object
+            properties:
+              callConnectionId:
+                type: string
+              phoneNumber:
+                type: string
+          description: One entry per phone number called
+        status:
+          type: string
+          example: "Call(s) initiated successfully"
+        timestamp:
+          type: string
+          format: date-time
+
+    ActiveCallsResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+          description: Number of currently active calls
+        maxConcurrent:
+          type: integer
+          example: 5
+        calls:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActiveCallSummary'
+
+    ActiveCallSummary:
+      type: object
+      properties:
+        callConnectionId:
+          type: string
+        targetPhoneNumber:
+          type: string
+        status:
+          type: string
+          enum: [Initiating, Ringing, Connected, Disconnected]
+        startedAt:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error category
+        message:
+          type: string
+          description: Human-readable error detail
+
+    TranscriptEntry:
+      type: object
+      description: Streamed via SignalR (TranscriptHub) and persisted in CallRecord
+      properties:
+        callConnectionId:
+          type: string
+        speaker:
+          type: string
+          enum: [AI, Recipient]
+        text:
+          type: string
+        sentiment:
+          $ref: '#/components/schemas/SentimentResult'
+        timestamp:
+          type: string
+          format: date-time
+
+    CallStatusUpdate:
+      type: object
+      description: Streamed via SignalR (TranscriptHub), not via REST
+      properties:
+        callConnectionId:
+          type: string
+        status:
+          type: string
+          enum: [Initiating, Ringing, Connected, Disconnected]
+        message:
+          type: string
+          nullable: true
+        timestamp:
+          type: string
+          format: date-time
+
+    Campaign:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique campaign identifier (GUID)
+        title:
+          type: string
+          description: Display name
+        description:
+          type: string
+          description: What the campaign is about
+        aiBehaviorInstructions:
+          type: string
+          description: System prompt for the AI agent
+        isDefault:
+          type: boolean
+          description: True for pre-defined campaigns (cannot be deleted)
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateCampaignRequest:
+      type: object
+      required: [title, description, aiBehaviorInstructions]
+      properties:
+        title:
+          type: string
+          description: Campaign display name (must be unique)
+        description:
+          type: string
+          description: What the campaign is about
+        aiBehaviorInstructions:
+          type: string
+          description: System prompt for the AI agent
+
+    SentimentResult:
+      type: object
+      properties:
+        label:
+          type: string
+          enum: [Positive, Neutral, Negative]
+          description: Sentiment classification
+        confidence:
+          type: number
+          format: float
+          description: Confidence score (0.0–1.0)
+
+    CallHistorySummary:
+      type: object
+      description: Summary entry for the call history list
+      properties:
+        callConnectionId:
+          type: string
+        phoneNumber:
+          type: string
+        campaignTitle:
+          type: string
+          nullable: true
+        duration:
+          type: string
+          description: Call duration (HH:mm:ss format)
+        overallSentiment:
+          type: string
+          enum: [Positive, Neutral, Negative]
+        startedAt:
+          type: string
+          format: date-time
+
+    CallRecord:
+      type: object
+      description: Full call record with transcript and analytics
+      properties:
+        callConnectionId:
+          type: string
+        phoneNumber:
+          type: string
+        campaignId:
+          type: string
+          nullable: true
+        campaignTitle:
+          type: string
+          nullable: true
+        prompt:
+          type: string
+        duration:
+          type: string
+          description: Call duration (HH:mm:ss format)
+        overallSentiment:
+          type: string
+          enum: [Positive, Neutral, Negative]
+        sentimentBreakdown:
+          type: object
+          properties:
+            positivePercent:
+              type: number
+              format: float
+            neutralPercent:
+              type: number
+              format: float
+            negativePercent:
+              type: number
+              format: float
+        talkTimeRatio:
+          type: object
+          properties:
+            aiPercent:
+              type: number
+              format: float
+            recipientPercent:
+              type: number
+              format: float
+        transcriptEntries:
+          type: array
+          items:
+            $ref: '#/components/schemas/TranscriptEntry'
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time

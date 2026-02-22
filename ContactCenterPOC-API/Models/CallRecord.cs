@@ -1,0 +1,44 @@
+namespace ContactCenterPOC.Models
+{
+    public class CallRecord
+    {
+        public string CallConnectionId { get; set; } = string.Empty;
+        public string PhoneNumber { get; set; } = string.Empty;
+        public string? CampaignId { get; set; }
+        public string? CampaignTitle { get; set; }
+        public string? ContactName { get; set; }
+        public string Prompt { get; set; } = string.Empty;
+        public string? RecordingId { get; set; }
+        public TimeSpan Duration { get; set; }
+        public SentimentLabel OverallSentiment { get; set; } = SentimentLabel.Neutral;
+        public SentimentBreakdown SentimentBreakdown { get; set; } = new();
+        public TalkTimeRatio TalkTimeRatio { get; set; } = new();
+        public List<TranscriptEntry> TranscriptEntries { get; set; } = new();
+        public DateTimeOffset StartedAt { get; set; }
+        public DateTimeOffset EndedAt { get; set; }
+    }
+
+    public class SentimentBreakdown
+    {
+        public float PositivePercent { get; set; }
+        public float NeutralPercent { get; set; }
+        public float NegativePercent { get; set; }
+    }
+
+    public class TalkTimeRatio
+    {
+        public float AiPercent { get; set; }
+        public float RecipientPercent { get; set; }
+    }
+
+    public class CallHistorySummary
+    {
+        public string CallConnectionId { get; set; } = string.Empty;
+        public string PhoneNumber { get; set; } = string.Empty;
+        public string? CampaignTitle { get; set; }
+        public string? ContactName { get; set; }
+        public string Duration { get; set; } = string.Empty;
+        public string OverallSentiment { get; set; } = "Neutral";
+        public DateTimeOffset StartedAt { get; set; }
+    }
+}

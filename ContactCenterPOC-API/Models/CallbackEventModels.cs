@@ -1,4 +1,6 @@
-﻿namespace ContactCenterPOC.Models
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace ContactCenterPOC.Models
 {
     public class CallbackEvent
     {
@@ -16,9 +18,17 @@
         public string ResultSubcode { get; set; }
     }
 
-    public class CallRequest {
-        public string PhoneNumber { get; set; }
-        public string Prompt { get; set; }
+    public class CallRequest
+    {
+        [Required(ErrorMessage = "At least one phone number is required")]
+        [MinLength(1, ErrorMessage = "At least one phone number is required")]
+        [MaxLength(2, ErrorMessage = "Maximum of 2 phone numbers allowed")]
+        public string[] PhoneNumbers { get; set; } = Array.Empty<string>();
 
+        public string[]? ContactNames { get; set; }
+
+        public string? CampaignId { get; set; }
+
+        public string? Prompt { get; set; }
     }
 }

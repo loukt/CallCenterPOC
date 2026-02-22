@@ -1,9 +1,12 @@
 ﻿using Azure.AI.OpenAI;
 using Azure.Communication.CallAutomation;
+using Azure.Identity;
+using ContactCenterPOC.Hubs;
 using ContactCenterPOC.Models;
+using Microsoft.AspNetCore.SignalR;
 using OpenAI.RealtimeConversation;
 using System.ClientModel;
-using System.Net.WebSockets;
+using System.Collections.Concurrent;
 
 
 namespace ContactCenterPOC.Services
@@ -15,56 +18,113 @@ namespace ContactCenterPOC.Services
         private AcsMediaStreamingHandler m_mediaStreaming;
         private MemoryStream m_memoryStream;
         private ILogger<CallService> _logger;
-        private string m_answerPromptSystemTemplate = "You are an AI assistant that helps people find information.";
-        private HttpContext _httpContext;
-        private WebSocket _webSocket;
+        private readonly IHubContext<TranscriptHub> _hubContext;
+        private readonly string _callConnectionId;
+        private readonly Func<string, Task>? _hangUpCallback;
+        private readonly SentimentAnalysisService? _sentimentService;
+        private readonly ConcurrentDictionary<string, ActiveCall>? _activeCalls;
+        private bool _sessionReady = false;
 
-        public AzureOpenAIService(AcsMediaStreamingHandler mediaStreaming, IConfiguration configuration, ILogger<CallService> logger)
+        public AzureOpenAIService(
+            AcsMediaStreamingHandler mediaStreaming,
+            IConfiguration configuration,
+            ILogger<CallService> logger,
+            IHubContext<TranscriptHub> hubContext,
+            string callConnectionId,
+            Func<string, Task>? hangUpCallback = null,
+            SentimentAnalysisService? sentimentService = null,
+            ConcurrentDictionary<string, ActiveCall>? activeCalls = null)
         {
             m_mediaStreaming = mediaStreaming;
             m_cts = new CancellationTokenSource();
-            m_aiSession = CreateAISessionAsync(configuration, null).GetAwaiter().GetResult();
             m_memoryStream = new MemoryStream();
             _logger = logger;
+            _hubContext = hubContext;
+            _callConnectionId = callConnectionId;
+            _hangUpCallback = hangUpCallback;
+            _sentimentService = sentimentService;
+            _activeCalls = activeCalls;
+
+            try
+            {
+                _logger.LogInformation("[AI-{CallId}] Creating AI session (no prompt)...", callConnectionId);
+                m_aiSession = CreateAISessionAsync(configuration, null).GetAwaiter().GetResult();
+                _sessionReady = true;
+                _logger.LogInformation("[AI-{CallId}] AI session created successfully", callConnectionId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[AI-{CallId}] FAILED to create AI session", callConnectionId);
+                throw;
+            }
         }
 
-        public AzureOpenAIService(AcsMediaStreamingHandler mediaStreaming, string prompt, IConfiguration configuration, ILogger<CallService> logger)
+        public AzureOpenAIService(
+            AcsMediaStreamingHandler mediaStreaming,
+            string prompt,
+            IConfiguration configuration,
+            ILogger<CallService> logger,
+            IHubContext<TranscriptHub> hubContext,
+            string callConnectionId,
+            Func<string, Task>? hangUpCallback = null,
+            SentimentAnalysisService? sentimentService = null,
+            ConcurrentDictionary<string, ActiveCall>? activeCalls = null)
         {
             m_mediaStreaming = mediaStreaming;
             m_cts = new CancellationTokenSource();
-            m_aiSession = CreateAISessionAsync(configuration, prompt).GetAwaiter().GetResult();
             m_memoryStream = new MemoryStream();
             _logger = logger;
+            _hubContext = hubContext;
+            _callConnectionId = callConnectionId;
+            _hangUpCallback = hangUpCallback;
+            _sentimentService = sentimentService;
+            _activeCalls = activeCalls;
+
+            try
+            {
+                _logger.LogInformation("[AI-{CallId}] Creating AI session with prompt ({PromptLen} chars)...", callConnectionId, prompt?.Length ?? 0);
+                m_aiSession = CreateAISessionAsync(configuration, prompt).GetAwaiter().GetResult();
+                _sessionReady = true;
+                _logger.LogInformation("[AI-{CallId}] AI session created successfully", callConnectionId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[AI-{CallId}] FAILED to create AI session", callConnectionId);
+                throw;
+            }
         }
 
 
 
         private async Task<RealtimeConversationSession> CreateAISessionAsync(IConfiguration configuration, string prompt)
         {
-
-            var openAiKey = configuration["AzureOpenAI:Key"];
-            ArgumentNullException.ThrowIfNullOrEmpty(openAiKey);
-
             var openAiUri = configuration["AzureOpenAI:EndpointUri"];
             ArgumentNullException.ThrowIfNullOrEmpty(openAiUri);
 
-            var openAiModelName = configuration["AzureOpenAI:DeploymentName"];// configuration.GetValue<string>("AzureOpenAIDeploymentModelName");
+            var openAiModelName = configuration["AzureOpenAI:DeploymentName"];
             ArgumentNullException.ThrowIfNullOrEmpty(openAiModelName);
+
             string systemPrompt = prompt;
             if (systemPrompt == null)
             {
-                systemPrompt = configuration["AzureOpenAI:SystemPrompt"];// configuration.GetValue<string>("SystemPrompt") ?? m_answerPromptSystemTemplate;
+                systemPrompt = configuration["AzureOpenAI:SystemPrompt"];
                 ArgumentNullException.ThrowIfNullOrEmpty(systemPrompt);
             }
-            var credentials = new ApiKeyCredential(openAiKey);
-            if (credentials == null)
-            {
-                throw new ArgumentNullException(nameof(credentials), "Failed to create ApiKeyCredential.");
-            }
-            var aiClient = new AzureOpenAIClient(new Uri(openAiUri), credentials);
-            var RealtimeCovnClient = aiClient.GetRealtimeConversationClient(openAiModelName);
+
+            _logger.LogInformation("[AI-{CallId}] Connecting to OpenAI Realtime: endpoint={Endpoint}, deployment={Deployment}",
+                _callConnectionId, openAiUri, openAiModelName);
+
+            // Use DefaultAzureCredential (Managed Identity in Azure, developer credentials locally)
+            // because the Azure OpenAI resource has disableLocalAuth=true (API key auth disabled)
+            var credential = new DefaultAzureCredential();
+            _logger.LogInformation("[AI-{CallId}] Using DefaultAzureCredential (Managed Identity / Entra ID)", _callConnectionId);
+
+            var aiClient = new AzureOpenAIClient(new Uri(openAiUri), credential);
+            var realtimeClient = aiClient.GetRealtimeConversationClient(openAiModelName);
             
-            var session = await RealtimeCovnClient.StartConversationSessionAsync();
+            _logger.LogInformation("[AI-{CallId}] Starting conversation session...", _callConnectionId);
+            var session = await realtimeClient.StartConversationSessionAsync();
+            _logger.LogInformation("[AI-{CallId}] Conversation session started, configuring...", _callConnectionId);
 
             // Session options control connection-wide behavior shared across all conversations,
             // including audio input format and voice activity detection settings.
@@ -81,8 +141,8 @@ namespace ContactCenterPOC.Services
                 TurnDetectionOptions = ConversationTurnDetectionOptions.CreateServerVoiceActivityTurnDetectionOptions(0.5f, TimeSpan.FromMilliseconds(500), TimeSpan.FromMilliseconds(500)),
             };
 
-            
             await session.ConfigureSessionAsync(sessionOptions);
+            _logger.LogInformation("[AI-{CallId}] Session configured (voice=Alloy, format=PCM16, VAD enabled)", _callConnectionId);
             return session;
         }
 
@@ -91,17 +151,21 @@ namespace ContactCenterPOC.Services
         {
             try
             {
+                _logger.LogInformation("[AI-{CallId}] Starting initial AI response...", _callConnectionId);
                 await m_aiSession.StartResponseAsync();
+                _logger.LogInformation("[AI-{CallId}] Listening for AI updates...", _callConnectionId);
+                int audioChunkCount = 0;
+                
                 await foreach (ConversationUpdate update in m_aiSession.ReceiveUpdatesAsync(m_cts.Token))
                 {
                     if (update is ConversationSessionStartedUpdate sessionStartedUpdate)
                     {
-                        _logger.LogInformation($"<<< Session started. ID: {sessionStartedUpdate.SessionId}");
+                        _logger.LogInformation("[AI-{CallId}] Session started. ID: {SessionId}", _callConnectionId, sessionStartedUpdate.SessionId);
                     }
 
                     if (update is ConversationInputSpeechStartedUpdate speechStartedUpdate)
                     {
-                        _logger.LogInformation($"  -- Voice activity detection started at {speechStartedUpdate.AudioStartTime} ms");
+                        _logger.LogInformation("[AI-{CallId}] Voice activity detection started at {AudioStartTime} ms", _callConnectionId, speechStartedUpdate.AudioStartTime);
                         // Barge-in, send stop audio
                         var jsonString = OutStreamingData.GetStopAudioForOutbound();
                         await m_mediaStreaming.SendMessageAsync(jsonString);
@@ -109,19 +173,38 @@ namespace ContactCenterPOC.Services
 
                     if (update is ConversationInputSpeechFinishedUpdate speechFinishedUpdate)
                     {
-                        _logger.LogInformation(  $"  -- Voice activity detection ended at {speechFinishedUpdate.AudioEndTime} ms");
+                        _logger.LogInformation("[AI-{CallId}] Voice activity detection ended at {AudioEndTime} ms", _callConnectionId, speechFinishedUpdate.AudioEndTime);
                     }
 
                     if (update is ConversationItemStreamingStartedUpdate itemStartedUpdate)
                     {
-                        _logger.LogInformation($"  -- Begin streaming of new item");
+                        _logger.LogInformation("[AI-{CallId}] Begin streaming of new item", _callConnectionId);
                     }
 
-                    // Audio transcript  updates contain the incremental text matching the generated
+                    // Audio transcript updates contain the incremental text matching the generated
                     // output audio.
                     if (update is ConversationItemStreamingAudioTranscriptionFinishedUpdate outputTranscriptDeltaUpdate)
                     {
-                        _logger.LogInformation(outputTranscriptDeltaUpdate.Transcript);
+                        _logger.LogInformation("[AI-{CallId}] AI transcript: {Transcript}", _callConnectionId, outputTranscriptDeltaUpdate.Transcript);
+                        var aiEntry = new TranscriptEntry
+                        {
+                            CallConnectionId = _callConnectionId,
+                            Speaker = SpeakerType.AI,
+                            Text = outputTranscriptDeltaUpdate.Transcript,
+                            Timestamp = DateTimeOffset.UtcNow
+                        };
+
+                        // Accumulate on ActiveCall for persistence
+                        if (_activeCalls != null && _activeCalls.TryGetValue(_callConnectionId, out var activeCall))
+                        {
+                            activeCall.TranscriptEntries.Add(aiEntry);
+                        }
+
+                        await _hubContext.Clients.Group(_callConnectionId)
+                            .SendAsync("TranscriptUpdate", aiEntry);
+
+                        // Fire-and-forget sentiment analysis
+                        FireAndForgetSentiment(aiEntry);
                     }
 
                     // Audio delta updates contain the incremental binary audio data of the generated output
@@ -130,52 +213,141 @@ namespace ContactCenterPOC.Services
                     {
                         if (deltaUpdate.AudioBytes != null)
                         {
+                            audioChunkCount++;
+                            if (audioChunkCount <= 3 || audioChunkCount % 50 == 0)
+                            {
+                                _logger.LogInformation("[AI-{CallId}] Sending audio chunk #{ChunkNum} ({ByteCount} bytes) to ACS", 
+                                    _callConnectionId, audioChunkCount, deltaUpdate.AudioBytes.ToArray().Length);
+                            }
                             var jsonString = OutStreamingData.GetAudioDataForOutbound(deltaUpdate.AudioBytes.ToArray());
                             await m_mediaStreaming.SendMessageAsync(jsonString);
+                        }
+                        else
+                        {
+                            _logger.LogWarning("[AI-{CallId}] Received delta update but AudioBytes is null", _callConnectionId);
                         }
                     }
 
                     if (update is ConversationItemStreamingTextFinishedUpdate itemFinishedUpdate)
                     {
-                        _logger.LogInformation($"  -- Item streaming finished, response_id={itemFinishedUpdate.ResponseId}");
+                        _logger.LogInformation("[AI-{CallId}] Item streaming finished, response_id={ResponseId}", _callConnectionId, itemFinishedUpdate.ResponseId);
                     }
 
                     if (update is ConversationInputTranscriptionFinishedUpdate transcriptionCompletedUpdate)
                     {
-                        _logger.LogInformation($"  -- User audio transcript: {transcriptionCompletedUpdate.Transcript}");
-                        
+                        _logger.LogInformation("[AI-{CallId}] User audio transcript: {Transcript}", _callConnectionId, transcriptionCompletedUpdate.Transcript);
+                        var recipientEntry = new TranscriptEntry
+                        {
+                            CallConnectionId = _callConnectionId,
+                            Speaker = SpeakerType.Recipient,
+                            Text = transcriptionCompletedUpdate.Transcript,
+                            Timestamp = DateTimeOffset.UtcNow
+                        };
+
+                        // Accumulate on ActiveCall for persistence
+                        if (_activeCalls != null && _activeCalls.TryGetValue(_callConnectionId, out var activeCall2))
+                        {
+                            activeCall2.TranscriptEntries.Add(recipientEntry);
+                        }
+
+                        await _hubContext.Clients.Group(_callConnectionId)
+                            .SendAsync("TranscriptUpdate", recipientEntry);
+
+                        // Fire-and-forget sentiment analysis
+                        FireAndForgetSentiment(recipientEntry);
                     }
 
                     if (update is ConversationResponseFinishedUpdate turnFinishedUpdate)
                     {
-                        _logger.LogInformation($"  -- Model turn generation finished. Status: {turnFinishedUpdate.Status}");
+                        _logger.LogInformation("[AI-{CallId}] Model turn generation finished. Status: {Status}. Total audio chunks sent: {ChunkCount}", 
+                            _callConnectionId, turnFinishedUpdate.Status, audioChunkCount);
                     }
 
                     if (update is ConversationErrorUpdate errorUpdate)
                     {
-                        _logger.LogInformation($"la on est en methode ERROR: {errorUpdate.Message}");
+                        _logger.LogError("[AI-{CallId}] OpenAI Realtime error: {ErrorMessage}", _callConnectionId, errorUpdate.Message);
+                        if (_hangUpCallback != null)
+                        {
+                            await _hangUpCallback(_callConnectionId);
+                        }
                         break;
                     }
                 }
+                _logger.LogInformation("[AI-{CallId}] AI response loop ended. Total audio chunks: {ChunkCount}", _callConnectionId, audioChunkCount);
             }
             catch (OperationCanceledException e)
             {
-                _logger.LogInformation($"{nameof(OperationCanceledException)} thrown with message: {e.Message}");
+                _logger.LogInformation("[AI-{CallId}] AI response loop cancelled: {Message}", _callConnectionId, e.Message);
             }
             catch (Exception ex)
             {
-                _logger.LogInformation($"Exception during ai streaming -> {ex}");
+                _logger.LogError(ex, "[AI-{CallId}] Exception during AI streaming", _callConnectionId);
+                if (_hangUpCallback != null)
+                {
+                    try { await _hangUpCallback(_callConnectionId); }
+                    catch (Exception cbEx) { _logger.LogWarning(cbEx, "[AI-{CallId}] Hang-up callback failed after AI error", _callConnectionId); }
+                }
             }
+        }
+
+        private void FireAndForgetSentiment(TranscriptEntry entry)
+        {
+            if (_sentimentService == null) return;
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var sentiment = await _sentimentService.AnalyzeAsync(entry.Text);
+                    entry.Sentiment = sentiment;
+
+                    // Send SentimentUpdate event to the frontend
+                    await _hubContext.Clients.Group(_callConnectionId)
+                        .SendAsync("SentimentUpdate", new
+                        {
+                            callConnectionId = _callConnectionId,
+                            entryTimestamp = entry.Timestamp,
+                            sentiment = sentiment
+                        });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "[AI-{CallId}] Sentiment analysis failed for entry", _callConnectionId);
+                }
+            });
         }
 
         public void StartConversation()
         {
-            _ = Task.Run(async () => await GetOpenAiStreamResponseAsync());
+            _logger.LogInformation("[AI-{CallId}] StartConversation called, sessionReady={Ready}", _callConnectionId, _sessionReady);
+            if (!_sessionReady)
+            {
+                _logger.LogError("[AI-{CallId}] Cannot start conversation - session not ready", _callConnectionId);
+                return;
+            }
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await GetOpenAiStreamResponseAsync();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "[AI-{CallId}] Unhandled exception in AI response task", _callConnectionId);
+                }
+            });
         }
 
         public async Task SendAudioToExternalAI(MemoryStream memoryStream)
         {
-            await m_aiSession.SendInputAudioAsync(memoryStream);
+            try
+            {
+                await m_aiSession.SendInputAudioAsync(memoryStream);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[AI-{CallId}] Failed to send audio to OpenAI ({ByteCount} bytes)", _callConnectionId, memoryStream.Length);
+            }
         }
 
         public void Close()

@@ -1,8 +1,12 @@
 ﻿using Azure;
 using Azure.Communication;
 using Azure.Communication.CallAutomation;
+using ContactCenterPOC.Hubs;
 using ContactCenterPOC.Models;
+using Microsoft.AspNetCore.SignalR;
+using System.Collections.Concurrent;
 using System.Net.WebSockets;
+using System.Text.RegularExpressions;
 
 
 namespace ContactCenterPOC.Services
@@ -10,227 +14,258 @@ namespace ContactCenterPOC.Services
     public class CallService
     {
         private readonly CallAutomationClient _callAutomationClient;
-        public CallAutomationClient CallAutomationClient {get {return _callAutomationClient;} }
+        public CallAutomationClient CallAutomationClient { get { return _callAutomationClient; } }
         private readonly PhoneNumberIdentifier _callerPhoneNumber;
-        private PhoneNumberIdentifier _targetPhoneNumber;
         private readonly string _callbackUri;
         private readonly ILogger<CallService> _logger;
-        private AcsMediaStreamingHandler _acsMediaStreamingHandler;
-        private readonly Dictionary<string, CallConnection> _activeConnections;
-        private readonly Dictionary<string, string> _activeCallPrompt;
-        private readonly Dictionary<string, string> _activeCallNumbers;
-        private readonly Dictionary<string, string> _activeRecordings;
-        private Response<CreateCallResult> _createCallResult;
-        private readonly IConfiguration _configuration ;
+        private readonly IConfiguration _configuration;
+        private readonly IHubContext<TranscriptHub> _hubContext;
+        private readonly CampaignService _campaignService;
+        private readonly SentimentAnalysisService? _sentimentService;
 
-        public CallService(IConfiguration configuration, ILogger<CallService> logger)
+        // Thread-safe dictionaries for concurrent call handling
+        private readonly ConcurrentDictionary<string, ActiveCall> _activeCalls = new();
+        private readonly ConcurrentDictionary<string, AcsMediaStreamingHandler> _mediaHandlers = new();
+
+        public ConcurrentDictionary<string, ActiveCall> ActiveCalls => _activeCalls;
+
+        public CallService(IConfiguration configuration, ILogger<CallService> logger, IHubContext<TranscriptHub> hubContext, CampaignService campaignService, SentimentAnalysisService? sentimentService = null)
         {
-            _logger = logger; 
+            _logger = logger;
             _configuration = configuration;
+            _hubContext = hubContext;
+            _campaignService = campaignService;
+            _sentimentService = sentimentService;
             var connectionString = configuration["AzureCommunicationServices:ConnectionString"];
-            _callbackUri = _configuration["CallbackUrl"];
+            _callbackUri = configuration["CallbackUrl"] ?? throw new InvalidOperationException("CallbackUrl not configured");
             _callAutomationClient = new CallAutomationClient(connectionString);
-            _callerPhoneNumber = new PhoneNumberIdentifier( configuration["AzureCommunicationServices:PhoneNumber"]);
-            _activeConnections = new Dictionary<string, CallConnection>();
-            _activeRecordings = new Dictionary<string, string>();
-            _activeCallPrompt = new Dictionary<string, string>();
-            _activeCallNumbers = new Dictionary<string, string>();
+            _callerPhoneNumber = new PhoneNumberIdentifier(configuration["AzureCommunicationServices:PhoneNumber"]);
         }
 
-        public async Task<string> InitiateCall(string targetPhoneNumber,string callContextPrompt, HttpContext httpContext)
+        private const int MaxConcurrentCalls = 5;
+        private static readonly Regex E164Regex = new(@"^\+[1-9]\d{1,14}$");
+
+        public async Task<List<(string callConnectionId, string phoneNumber)>> InitiateCall(string[] phoneNumbers, string? callContextPrompt, string? campaignId, string[]? contactNames, HttpContext httpContext)
         {
-            
-            // Create the call participants
-            _targetPhoneNumber = new PhoneNumberIdentifier(targetPhoneNumber);
-            // Create the call invite
-            var callInvite = new CallInvite(_targetPhoneNumber, _callerPhoneNumber);
-            
-            // Specify callback URI for events
-            var callbackUri = new Uri(_callbackUri);
-            // Initiate the call with correct parameters
-
-            var callOptions = new CreateCallOptions(callInvite, callbackUri);
-            var wssuri = new Uri(_callbackUri.Replace("https", "wss") + "/ws?targetNumber="+targetPhoneNumber);
-            var mediaStreamingOptions = new MediaStreamingOptions(
-                wssuri,
-                MediaStreamingContent.Audio,
-                MediaStreamingAudioChannel.Mixed,
-                startMediaStreaming: true
-                )
+            // Validate phone numbers
+            if (phoneNumbers == null || phoneNumbers.Length == 0)
+                throw new ArgumentException("At least one phone number is required.");
+            if (phoneNumbers.Length > 2)
+                throw new ArgumentException("Maximum of 2 phone numbers allowed.");
+            foreach (var pn in phoneNumbers)
             {
-                EnableBidirectional = true,
-                AudioFormat = AudioFormat.Pcm24KMono
-            };
-            callOptions.MediaStreamingOptions = mediaStreamingOptions;
-            _createCallResult = await _callAutomationClient.CreateCallAsync(callOptions);
-            var callConnectionId = _createCallResult.Value.CallConnection.CallConnectionId;
-            _activeConnections[callConnectionId] = _createCallResult.Value.CallConnection;
-            _activeCallPrompt[callConnectionId] = callContextPrompt;
-            _activeCallNumbers[targetPhoneNumber] = callConnectionId;
-            return _createCallResult.Value.CallConnection.CallConnectionId;
-        }
+                if (!E164Regex.IsMatch(pn))
+                    throw new ArgumentException($"Phone number '{pn}' is not in E.164 format.");
+            }
 
-
-        public async Task StartCallInteraction(string callId, HttpContext httpContext)
-        {
-            if (httpContext.WebSockets.IsWebSocketRequest)
+            // Check concurrent limit
+            if (_activeCalls.Count + phoneNumbers.Length > MaxConcurrentCalls)
             {
-                var ws = await httpContext.WebSockets.AcceptWebSocketAsync();
-                // Accept the WebSocket connection
-                _logger.LogInformation("There is WebSocket connected");
+                var available = MaxConcurrentCalls - _activeCalls.Count;
+                throw new InvalidOperationException($"Maximum of {MaxConcurrentCalls} concurrent calls allowed. {available} slot(s) available.");
+            }
 
-                // Handle incoming messages (or process streaming)
-                if (ws.State == WebSocketState.Open)
+            // Resolve prompt from campaign or direct prompt
+            string effectivePrompt;
+            string? resolvedCampaignId = null;
+            string? resolvedCampaignTitle = null;
+
+            if (!string.IsNullOrWhiteSpace(callContextPrompt))
+            {
+                // Direct prompt takes precedence
+                effectivePrompt = callContextPrompt;
+            }
+            else if (!string.IsNullOrWhiteSpace(campaignId))
+            {
+                // Look up campaign
+                var campaign = await _campaignService.GetByIdAsync(campaignId);
+                if (campaign != null)
                 {
-                    //var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
-                    _acsMediaStreamingHandler = new AcsMediaStreamingHandler(ws, _configuration, _logger);
-                    await _acsMediaStreamingHandler.ProcessWebSocketAsync(_activeCallPrompt[callId]);
+                    effectivePrompt = campaign.AiBehaviorInstructions;
+                    resolvedCampaignId = campaign.Id;
+                    resolvedCampaignTitle = campaign.Title;
+                }
+                else
+                {
+                    _logger.LogWarning("Campaign {CampaignId} not found, using default prompt", campaignId);
+                    effectivePrompt = _configuration["AzureOpenAI:SystemPrompt"] ?? "You are an AI assistant that helps people find information.";
                 }
             }
             else
             {
-                _logger.LogInformation("Not a WebSocket request :" + httpContext.Response.StatusCode);
-                _logger.LogInformation("Not a WebSocket request");
-
+                // Default prompt fallback (FR-008)
+                effectivePrompt = _configuration["AzureOpenAI:SystemPrompt"] ?? "You are an AI assistant that helps people find information.";
             }
+
+            var results = new List<(string callConnectionId, string phoneNumber)>();
+
+            for (int i = 0; i < phoneNumbers.Length; i++)
+            {
+                var targetPhoneNumber = phoneNumbers[i];
+                var contactName = (contactNames != null && i < contactNames.Length && !string.IsNullOrWhiteSpace(contactNames[i]))
+                    ? contactNames[i].Trim()
+                    : null;
+
+                // Prepend contact name instruction to prompt if provided
+                var callPrompt = effectivePrompt;
+                if (contactName != null)
+                {
+                    callPrompt = $"IMPORTANT: The person you are calling is named {contactName}. You MUST greet them by name at the start of the conversation, for example: 'Hello {contactName}'. " + callPrompt;
+                    _logger.LogInformation("Call to {PhoneNumber} will greet contact as '{ContactName}'", targetPhoneNumber, contactName);
+                }
+
+                var targetPhone = new PhoneNumberIdentifier(targetPhoneNumber);
+                var callInvite = new CallInvite(targetPhone, _callerPhoneNumber);
+
+                var callbackUri = new Uri(_callbackUri);
+                var callOptions = new CreateCallOptions(callInvite, callbackUri);
+
+                var wssUri = new Uri(_callbackUri.Replace("https", "wss") + "/ws?targetNumber=" + targetPhoneNumber);
+                var mediaStreamingOptions = new MediaStreamingOptions(
+                    wssUri,
+                    MediaStreamingContent.Audio,
+                    MediaStreamingAudioChannel.Mixed,
+                    startMediaStreaming: true)
+                {
+                    EnableBidirectional = true,
+                    AudioFormat = AudioFormat.Pcm24KMono
+                };
+                callOptions.MediaStreamingOptions = mediaStreamingOptions;
+
+                var createCallResult = await _callAutomationClient.CreateCallAsync(callOptions);
+                var callConnectionId = createCallResult.Value.CallConnection.CallConnectionId;
+
+                var activeCall = new ActiveCall
+                {
+                    CallConnectionId = callConnectionId,
+                    TargetPhoneNumber = targetPhoneNumber,
+                    CampaignId = resolvedCampaignId,
+                    CampaignTitle = resolvedCampaignTitle,
+                    ContactName = contactName,
+                    Prompt = callPrompt,
+                    Status = CallStatus.Initiating,
+                    StartedAt = DateTimeOffset.UtcNow
+                };
+
+                // Set up 5-minute auto-terminate timeout
+                activeCall.CancellationTokenSource.CancelAfter(TimeSpan.FromMinutes(5));
+                activeCall.CancellationTokenSource.Token.Register(async () =>
+                {
+                    _logger.LogInformation("Call {CallConnectionId} auto-terminated after 5 minutes", callConnectionId);
+                    await HangUpCall(callConnectionId);
+                });
+
+                _activeCalls[callConnectionId] = activeCall;
+                results.Add((callConnectionId, targetPhoneNumber));
+            }
+
+            return results;
         }
 
-        public async Task StartCallInteraction( HttpContext httpContext, string targetNumber)
+        public async Task StartCallInteraction(HttpContext httpContext, string targetNumber)
         {
             if (httpContext.WebSockets.IsWebSocketRequest)
             {
                 var ws = await httpContext.WebSockets.AcceptWebSocketAsync();
-                // Accept the WebSocket connection
-                _logger.LogInformation("There is WebSocket connected");
+                _logger.LogInformation("WebSocket connected for target {TargetNumber}", targetNumber);
 
-                // Handle incoming messages (or process streaming)
                 if (ws.State == WebSocketState.Open)
                 {
-                    //var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
-                    _acsMediaStreamingHandler = new AcsMediaStreamingHandler(ws, _configuration, _logger);
-                    var callConnectionId = _activeCallNumbers[targetNumber];
-                    await _acsMediaStreamingHandler.ProcessWebSocketAsync(_activeCallPrompt[callConnectionId]);
+                    // Find the callConnectionId by target number
+                    var activeCall = _activeCalls.Values.FirstOrDefault(c => c.TargetPhoneNumber == targetNumber);
+                    if (activeCall == null)
+                    {
+                        _logger.LogWarning("No active call found for target number {TargetNumber}", targetNumber);
+                        return;
+                    }
+
+                    var callConnectionId = activeCall.CallConnectionId;
+                    var handler = new AcsMediaStreamingHandler(
+                        ws, _configuration, _logger, _hubContext,
+                        callConnectionId, async (id) => await HangUpCall(id),
+                        _sentimentService, _activeCalls);
+                    _mediaHandlers[callConnectionId] = handler;
+                    await handler.ProcessWebSocketAsync(activeCall.Prompt);
                 }
             }
             else
             {
-                _logger.LogInformation("Not a WebSocket request :" + httpContext.Response.StatusCode);
-                _logger.LogInformation("Not a WebSocket request");
-
+                _logger.LogWarning("Non-WebSocket request received on WS endpoint");
             }
         }
 
-
-        public async Task StartCallInteractionToPlaySound(string callConnectionId)
+        public async Task HangUpCall(string callConnectionId)
         {
-            
-            // Create a call connection client
-            var callConnection = _callAutomationClient.GetCallConnection(callConnectionId);
-
-            _logger.LogInformation("We are here 1 ////////////////");
-            var eventResult = await _createCallResult.Value.WaitForEventProcessorAsync();
-            CallConnected returnedEvent= eventResult.SuccessResult;
-            // Play initial greeting
-            //var playsourceuri = new Uri("file:///C:/Users/serha/OneDrive/Documents/DevProjects/CallCenterPOC/CallCenterCoreAPI/Media/YassineMagicienwav.wav");
-
-
-            //string filePath = "/sound/mysound.wav"; // Relative to wwwroot
-            
-            //var playsourceuri = new Uri("https://f8f5-167-220-255-162.ngrok-free.app/Media/YassineMagicienwav.wav");
-            //var playSource = new FileSource(playsourceuri);
-            var ssml = "<speak version='1.0' xml:lang='en-US'><voice name='en-US-JennyNeural'>Hello! Is this working?</voice></speak>";
-            var playSource = new SsmlSource(ssml);
-            var playSources = new List<PlaySource> { playSource };
-            var playTo = new List<CommunicationIdentifier> { _targetPhoneNumber };
-            var playOptions = new PlayOptions(playSources, playTo)
+            try
             {
-                Loop = false,
-                OperationContext = "InitialGreeting",
-                OperationCallbackUri = new Uri(_callbackUri)
-            };
-
-            _logger.LogInformation("We are here 2 ////////////////");
-
-            var playResult = await callConnection.GetCallMedia().PlayAsync(playOptions);
-
-
-            PlayEventResult playEventResult = await playResult.Value.WaitForEventProcessorAsync();
-
-            _logger.LogInformation("We are here 3 ////////////////");
-
-            // check if the play was completed successfully
-            if (playEventResult.IsSuccess)
-            {
-                _logger.LogInformation("We are here SUCCESS ////////////////");
-                // success play!
-                PlayCompleted playCompleted = playEventResult.SuccessResult;
+                var callConnection = _callAutomationClient.GetCallConnection(callConnectionId);
+                await callConnection.HangUpAsync(forEveryone: true);
             }
-            else
+            catch (Exception ex)
             {
-
-                PlayFailed playFailed = playEventResult.FailureResult;
-                _logger.LogError($"Play failed. Reason: {playFailed.ResultInformation?.Message}");
-
-                // Log additional details
-                _logger.LogError($"Error Code: {playFailed.ResultInformation?.Code}");
-                _logger.LogError($"Subcode: {playFailed.ResultInformation?.SubCode}");
-
-                _logger.LogInformation("We are here FAIL ////////////////");
-                // failed to play the audio.
+                _logger.LogError(ex, "Error hanging up call {CallConnectionId}", callConnectionId);
             }
-            _logger.LogInformation("We are here Finished ////////////////");
-
-        }
-
-        public async Task CleanupCall(string callConnectionId, string serverCallId)
-        {
-            // Implement cleanup logic
-            _logger.LogInformation($"Call {callConnectionId} disconnected, cleaning up resources");
-            await stopRecordingAsync(serverCallId);
-        }
-
-
-        public async Task HandlePlaybackCompleted(string callConnectionId)
-        {
-            var callConnection = _callAutomationClient.GetCallConnection(callConnectionId);
-
-            // Start recognizing speech after playback completes
-            var recognizeOptions = new CallMediaRecognizeSpeechOptions(_targetPhoneNumber)
+            finally
             {
-                InterruptPrompt = true,
-                OperationContext = "MainConversation",
-                EndSilenceTimeout = TimeSpan.FromSeconds(5)
-            };
-
-            await callConnection.GetCallMedia().StartRecognizingAsync(recognizeOptions);
+                await CleanupCall(callConnectionId);
+            }
         }
 
-
-        public async Task startRecordingAsync(String serverCallId)
+        public async Task CleanupCall(string callConnectionId)
         {
-            var callConnection = _callAutomationClient.GetCallConnection(serverCallId);
-            StartRecordingOptions recordingOptions = new StartRecordingOptions(new ServerCallLocator(serverCallId)) {
-                RecordingChannel = RecordingChannel.Mixed,
-                RecordingContent = RecordingContent.Audio,
-                RecordingFormat = RecordingFormat.Mp3,
-                RecordingStorage = RecordingStorage.CreateAzure
-                RecordingStorage(new Uri(_configuration["BlobContainer"]))
-            };
-            
-            var startRecordingResponse = await _callAutomationClient.GetCallRecording().StartAsync(recordingOptions).ConfigureAwait(false);
-            _activeRecordings[serverCallId] = startRecordingResponse.Value.RecordingId;
+            _logger.LogInformation("Cleaning up call {CallConnectionId}", callConnectionId);
+
+            if (_activeCalls.TryRemove(callConnectionId, out var activeCall))
+            {
+                // Stop recording if active
+                if (!string.IsNullOrEmpty(activeCall.RecordingId))
+                {
+                    await StopRecordingAsync(activeCall.RecordingId);
+                }
+
+                // Dispose CTS
+                activeCall.CancellationTokenSource.Dispose();
+            }
+
+            // Remove media handler
+            _mediaHandlers.TryRemove(callConnectionId, out _);
         }
 
-        public async Task stopRecordingAsync(String serverCallId)
+        public async Task StartRecordingAsync(string serverCallId, string callConnectionId)
         {
-            try {
+            try
+            {
+                StartRecordingOptions recordingOptions = new StartRecordingOptions(new ServerCallLocator(serverCallId))
+                {
+                    RecordingChannel = RecordingChannel.Mixed,
+                    RecordingContent = RecordingContent.Audio,
+                    RecordingFormat = RecordingFormat.Mp3,
+                    RecordingStorage = RecordingStorage.CreateAzureBlobContainerRecordingStorage(new Uri(_configuration["BlobContainer"] ?? ""))
+                };
 
-                await _callAutomationClient.GetCallRecording().StopAsync(_activeRecordings[serverCallId]);
+                var startRecordingResponse = await _callAutomationClient.GetCallRecording().StartAsync(recordingOptions).ConfigureAwait(false);
 
-            } catch (Exception e) { }
+                if (_activeCalls.TryGetValue(callConnectionId, out var activeCall))
+                {
+                    activeCall.RecordingId = startRecordingResponse.Value.RecordingId;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to start recording for call {CallConnectionId}", callConnectionId);
+            }
         }
 
-
-
+        public async Task StopRecordingAsync(string recordingId)
+        {
+            try
+            {
+                await _callAutomationClient.GetCallRecording().StopAsync(recordingId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to stop recording {RecordingId}", recordingId);
+            }
+        }
     }
 }

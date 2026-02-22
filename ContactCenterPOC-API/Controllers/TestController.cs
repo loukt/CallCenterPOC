@@ -1,14 +1,12 @@
-﻿using Azure.AI.OpenAI;
-using ContactCenterPOC.Models;
-using ContactCenterPOC.Services;
+﻿using ContactCenterPOC.Services;
 using Microsoft.AspNetCore.Mvc;
-using OpenAI.RealtimeConversation;
-using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 
 namespace ContactCenterPOC.Controllers
 {
-
+#if DEBUG
     [ApiController]
+    [ApiExplorerSettings(IgnoreApi = true)]
     [Route("api/[controller]")]
     public class TestController : ControllerBase
     {
@@ -28,16 +26,14 @@ namespace ContactCenterPOC.Controllers
         {
             try
             {
-                // Initiate test call
-                var callId = await _callService.InitiateCall(phoneNumber,null,HttpContext);
-                //var callId = await _callService.InitiateCall("+6597507515", HttpContext);
-                // Start realtime conversation
-                await _callService.StartCallInteraction(callId, HttpContext);
+                var results = await _callService.InitiateCall(
+                    new[] { phoneNumber }, null, null, null, HttpContext);
+
                 return Ok(new
                 {
-                    CallId = callId,
-                    Status = "Call initiated successfully",
-                    Timestamp = DateTime.UtcNow
+                    calls = results.Select(r => new { r.callConnectionId, r.phoneNumber }),
+                    status = "Test call initiated successfully",
+                    timestamp = DateTimeOffset.UtcNow
                 });
             }
             catch (Exception ex)
@@ -45,12 +41,11 @@ namespace ContactCenterPOC.Controllers
                 _logger.LogError(ex, "Error during test call");
                 return StatusCode(500, new
                 {
-                    Error = "Failed to initiate test call",
-                    Message = ex.Message
+                    error = "Failed to initiate test call",
+                    message = ex.Message
                 });
             }
         }
     }
-
-
+#endif
 }

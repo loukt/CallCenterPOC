@@ -1,5 +1,16 @@
 {
     "appService.preDeployTask": "publish-release",
     "appService.deploySubpath": "CallCenterCoreAPI\\bin\\Release\\net9.0\\publish",
-    "appService.defaultWebAppToDeploy": "/subscriptions/d34886f7-4c88-49fb-aca6-f14869664c96/resourceGroups/ContactCenterPOC/providers/Microsoft.Web/sites/contactcenter-poc-api"
+    "appService.defaultWebAppToDeploy": "/subscriptions/d34886f7-4c88-49fb-aca6-f14869664c96/resourceGroups/ContactCenterPOC/providers/Microsoft.Web/sites/contactcenter-poc-api",
+    "chat.promptFilesRecommendations": {
+        "speckit.constitution": true,
+        "speckit.specify": true,
+        "speckit.plan": true,
+        "speckit.tasks": true,
+        "speckit.implement": true
+    },
+    "chat.tools.terminal.autoApprove": {
+        ".specify/scripts/bash/": true,
+        ".specify/scripts/powershell/": true
+    }
 }
