@@ -7,7 +7,7 @@
 
 ## Summary
 
-Build an outbound call center POC with two .NET 9 projects: a Razor Pages web app (operator UI) and an ASP.NET Core Web API (call orchestration). The operator uses a professional, enterprise-grade operations center dashboard inspired by modern banking/financial services UIs — deep navy branded header, three-panel layout (left: campaign library with colored category badges + call setup; center: live call workspace with professional call controls, chat-bubble transcript, sentiment graph, and quick responses; right: call analytics and history with expandable detail views), and KPI summary cards. The system ships with 6 pre-defined outbound campaigns (Bank Loan Collection, New Product Marketing, Customer Satisfaction Survey, Appointment Reminder, Insurance Policy Renewal, Subscription Renewal & Upsell), each with detailed production-quality AI behavior instructions. The API places simultaneous outbound calls via Azure Communication Services Call Automation, establishes independent bidirectional audio WebSockets, and bridges each to its own Azure OpenAI Realtime API session for live AI-driven voice conversations. Calls are auto-recorded, capped at 5 minutes and 5 concurrent, with live transcripts and real-time sentiment analysis streamed back to the operator. Campaigns are persistable and customizable. Call history with full transcripts, sentiment analytics, and speaker timelines is available for post-call review.
+Build an outbound call center POC with two .NET 9 projects: a Razor Pages web app (operator UI) and an ASP.NET Core Web API (call orchestration). The operator uses a professional, enterprise-grade operations center dashboard inspired by modern banking/financial services UIs — deep navy branded header, three-panel layout (left: campaign library with colored category badges + call setup; center: live call workspace with professional call controls, chat-bubble transcript, sentiment graph, and quick responses; right: call analytics and history with expandable detail views), and KPI summary cards. The system ships with 6 pre-defined outbound campaigns (Bank Loan Collection, New Product Marketing, Customer Satisfaction Survey, Appointment Reminder, Insurance Policy Renewal, Subscription Renewal & Upsell), each with detailed production-quality AI behavior instructions. The API places simultaneous outbound calls via Azure Communication Services Call Automation, establishes independent bidirectional audio WebSockets, and bridges each to its own Azure OpenAI Realtime API session for live AI-driven voice conversations. Calls are auto-recorded, capped at 5 minutes and 5 concurrent, with live transcripts and real-time sentiment analysis streamed back to the operator. Campaigns are persistable and customizable. Call history with full transcripts, sentiment analytics, speaker timelines, and on-demand transcription of previously stored recordings is available for post-call review.
 
 ## Technical Context
 
@@ -173,3 +173,62 @@ Three features and one bug fix:
 | `CallCenterPOC-App/wwwroot/js/site.js` | Send contact names, render audio player, show names in history |
 | `CallCenterPOC-App/wwwroot/css/site.css` | Styles for contact name inputs and audio player |
 | `CallCenterPOC-API.Tests/` | Update tests for new fields |
+
+---
+
+## Phase 16: History Persistence, Recording Playback Fix, Campaign Prompt UX (Bug Fixes)
+
+### Summary
+
+Three critical bug fixes identified during production testing:
+1. **Call History Not Persistent**: `BlobStorage:AccountUri` was never configured on Azure, causing `BlobServiceClient` to fall back to `UseDevelopmentStorage=true` which silently fails. Campaign list appeared to work because `CampaignService` falls back to in-memory defaults on Blob failure. Fix: derive `BlobStorage:AccountUri` from the existing `BlobContainer` URL and configure on Azure.
+2. **Recording Playback Broken**: The `GET /api/CallHistory/{id}/recording` endpoint uses `DownloadStreamingAsync(new Uri(recordingId))` but `RecordingId` from ACS `StartAsync()` is an opaque ID, not a download URL. The download URL is only available from the `RecordingFileStatusUpdated` Event Grid event, which we don't subscribe to. Fix: download recording files directly from the ACS recording Blob container using `BlobServiceClient`.
+3. **Campaign Prompt Not Updating**: `selectCampaign()` only sets the prompt textarea if it's currently empty. If the user previously typed text (e.g., "Loan"), subsequent campaign selections don't update the prompt, and the prompt override always wins in the API. Fix: always show campaign prompt in a visible preview, clear the override textarea when selecting a campaign.
+
+### Technical Approach
+
+**History Persistence Fix**:
+- In `Program.cs`, derive `BlobStorage:AccountUri` from the `BlobContainer` URL as a fallback (parse the storage account base URL).
+- On Azure, explicitly set `BlobStorage__AccountUri` app setting.
+- The existing `CallHistoryService` code already persists to Blob — it just lacks a working `BlobServiceClient` connection.
+
+**Recording Playback Fix**:
+- Replace the `DownloadStreamingAsync(Uri)` approach in `CallHistoryController.GetRecording()`.
+- Inject `BlobServiceClient` + read `BlobContainer` config to get the recording container name.
+- Search for blobs in the recording container with a prefix matching the recording ID.
+- Stream the first matching MP3 blob directly to the client.
+- Add `HasRecording` to `CallHistorySummary` so the UI can show a recording indicator on history items.
+
+**Campaign Prompt UX Fix**:
+- Update `selectCampaign()` to always clear the prompt override textarea and show the campaign instructions in a dedicated read-only preview area.
+- Add a "Campaign Prompt" preview section below the campaign cards that shows the selected campaign's `aiBehaviorInstructions`.
+- In `initiateCall()`, only include `prompt` in the body if the user explicitly typed in the override area — not if it was auto-populated.
+- On the API side, the existing logic already handles `prompt` vs `campaignId` priority correctly; the fix is purely frontend.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `ContactCenterPOC-API/Program.cs` | Derive `BlobStorage:AccountUri` from `BlobContainer` as fallback |
+| `ContactCenterPOC-API/Controllers/CallHistoryController.cs` | Download recording from Blob container instead of ACS API |
+| `ContactCenterPOC-API/Models/CallRecord.cs` | Add `HasRecording` to `CallHistorySummary` |
+| `ContactCenterPOC-API/Services/CallHistoryService.cs` | Set `HasRecording` in `ToSummary()` |
+| `CallCenterPOC-App/Pages/Index.cshtml` | Add campaign prompt preview area |
+| `CallCenterPOC-App/wwwroot/js/site.js` | Fix campaign selection, recording icon, prompt handling |
+| `CallCenterPOC-App/wwwroot/css/site.css` | Styles for prompt preview area |
+
+---
+
+## Phase 18: Transcribe Existing Recordings Into History (US11)
+
+### Summary
+
+Add an on-demand transcription flow for recordings that already exist in Blob Storage, and persist the transcript back into the historical call record JSON. This enables historical-call review with a readable transcript even if it was not captured live.
+
+### Technical Approach
+
+- Implement a backend `RecordingTranscriptionService` that downloads the recording audio from the configured ACS recording container in Blob Storage and calls the Azure OpenAI audio transcription endpoint.
+- Authenticate to Azure OpenAI via Entra ID using `DefaultAzureCredential` and request a Bearer token scoped to `https://cognitiveservices.azure.com/.default`.
+- Persist the resulting transcript text into the existing call history blob `call-history/{callConnectionId}.json` (single source of truth).
+- Expose `POST /api/CallHistory/{callConnectionId}/transcribe?force=false` to trigger transcription and return the updated `CallRecord`.
+- In the dashboard call detail panel, show a “Transcribe” button when a recording exists but no transcript is present; display the transcript and hide the button once persisted.

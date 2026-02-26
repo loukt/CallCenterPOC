@@ -16,6 +16,7 @@
     var isMuted = false;
     var isOnHold = false;
     var micActivityTimeout = null;
+    var promptManuallyEdited = false; // Track if user explicitly typed in prompt override
 
     // KPI state (persisted to sessionStorage)
     var kpiState = loadKpiState();
@@ -161,10 +162,19 @@
             }
         });
 
-        // Set prompt to campaign instructions if prompt is empty
+        // Show campaign prompt in preview area
+        var previewEl = document.getElementById("campaignPromptPreview");
+        var previewText = document.getElementById("campaignPromptText");
+        if (previewEl && previewText) {
+            previewText.textContent = campaign.aiBehaviorInstructions || "";
+            previewEl.classList.remove("d-none");
+        }
+
+        // Clear the prompt override textarea when selecting a campaign
         var promptEl = document.getElementById("prompt");
-        if (promptEl && !promptEl.value) {
-            promptEl.value = campaign.aiBehaviorInstructions || "";
+        if (promptEl) {
+            promptEl.value = "";
+            promptManuallyEdited = false;
         }
     }
 
@@ -285,7 +295,7 @@
         errorEl.classList.add("d-none");
 
         var body = { phoneNumbers: phoneNumbers };
-        if (prompt) body.prompt = prompt;
+        if (prompt && promptManuallyEdited) body.prompt = prompt;
         if (campaignId) body.campaignId = campaignId;
         // Only include contactNames if at least one name is provided
         if (contactNames.some(function (n) { return n.length > 0; })) {
@@ -372,7 +382,7 @@
         connection.onreconnected(function () {
             console.info("SignalR reconnected");
             Object.keys(calls).forEach(function (id) {
-                if (calls[id].status !== "Disconnected") {
+                if (calls[id].status !== "Disconnected" && calls[id].status !== "Failed") {
                     connection.invoke("JoinCall", id);
                 }
             });
@@ -441,10 +451,10 @@
             var c = calls[id];
             var tab = document.createElement("button");
             tab.className = "call-tab" + (id === activeTabId ? " active" : "") +
-                (c.status === "Disconnected" ? " disconnected" : "");
+                (c.status === "Disconnected" || c.status === "Failed" ? " disconnected" : "");
             tab.textContent = c.phoneNumber || id.substring(0, 8);
 
-            if (c.status === "Disconnected") {
+            if (c.status === "Disconnected" || c.status === "Failed") {
                 var dismiss = document.createElement("span");
                 dismiss.className = "tab-dismiss";
                 dismiss.textContent = "×";
@@ -515,7 +525,7 @@
 
         // End call button
         var endBtn = document.getElementById("endCallBtn");
-        endBtn.disabled = (c.status === "Disconnected");
+        endBtn.disabled = (c.status === "Disconnected" || c.status === "Failed");
         endBtn.onclick = function () { hangUpCall(callConnectionId); };
 
         // Transcript (chat bubbles)
@@ -683,7 +693,7 @@
         if (!c) return;
 
         var statusStr = typeof status === "number"
-            ? ["Initiating", "Ringing", "Connected", "Disconnected"][status]
+            ? ["Initiating", "Ringing", "Connected", "Disconnected", "Failed"][status]
             : status;
 
         c.status = statusStr;
@@ -704,8 +714,8 @@
             kpiState.successfulCalls++;
         }
 
-        // Stop timer on Disconnected
-        if (statusStr === "Disconnected") {
+        // Stop timer on Disconnected or Failed
+        if (statusStr === "Disconnected" || statusStr === "Failed") {
             if (c.timerInterval) {
                 clearInterval(c.timerInterval);
                 c.timerInterval = null;
@@ -730,7 +740,7 @@
         if (callConnectionId === activeTabId) {
             var badge = document.getElementById("callStatusBadge");
             setStatusBadge(badge, statusStr);
-            if (statusStr === "Disconnected") {
+            if (statusStr === "Disconnected" || statusStr === "Failed") {
                 document.getElementById("endCallBtn").disabled = true;
             }
             updateRightPanelCallInfo(c);
@@ -747,6 +757,7 @@
             case "Ringing": badge.classList.add("bg-warning", "text-dark"); break;
             case "Connected": badge.classList.add("bg-success"); break;
             case "Disconnected": badge.classList.add("bg-danger"); break;
+            case "Failed": badge.classList.add("bg-danger"); break;
             default: badge.classList.add("bg-secondary");
         }
     }
@@ -1100,8 +1111,12 @@
                         ? escapeHtml(item.contactName) + ' <span style="opacity:0.5;font-size:0.75rem;">(' + escapeHtml(item.phoneNumber) + ')</span>'
                         : escapeHtml(item.phoneNumber);
 
+                    var recordingIcon = item.hasRecording
+                        ? '<span class="recording-indicator" title="Recording available">🎙</span>'
+                        : '';
+
                     div.innerHTML =
-                        '<div class="history-phone">' + displayName +
+                        '<div class="history-phone">' + displayName + recordingIcon +
                         '  <span class="sentiment-badge-large ' + sentimentClass + '">' +
                         escapeHtml(getSentimentLabel(item.overallSentiment)) + '</span></div>' +
                         '<div class="history-campaign"><span class="category-badge ' + campCat.css + '" style="font-size:0.6rem;">' +
@@ -1155,16 +1170,41 @@
                 var recordingSection = document.getElementById("recordingSection");
                 var recordingPlayer = document.getElementById("recordingPlayer");
                 var noRecordingMsg = document.getElementById("noRecordingMsg");
+                var recordingTranscriptSection = document.getElementById("recordingTranscriptSection");
+                var recordingTranscriptText = document.getElementById("recordingTranscriptText");
+                var recordingTranscriptLoading = document.getElementById("recordingTranscriptLoading");
+                var transcribeRecordingBtn = document.getElementById("transcribeRecordingBtn");
                 if (recordingSection) {
                     recordingSection.style.display = "block";
                     if (record.recordingId) {
                         recordingPlayer.src = apiBaseUrl() + "/api/CallHistory/" + record.callConnectionId + "/recording";
                         recordingPlayer.style.display = "block";
                         noRecordingMsg.style.display = "none";
+
+                        if (recordingTranscriptSection) {
+                            recordingTranscriptSection.style.display = "block";
+                            if (recordingTranscriptLoading) recordingTranscriptLoading.classList.add("d-none");
+
+                            if (record.recordingTranscript) {
+                                if (recordingTranscriptText) recordingTranscriptText.textContent = record.recordingTranscript;
+                                if (transcribeRecordingBtn) transcribeRecordingBtn.style.display = "none";
+                            } else {
+                                if (recordingTranscriptText) recordingTranscriptText.textContent = "";
+                                if (transcribeRecordingBtn) {
+                                    transcribeRecordingBtn.style.display = "inline-block";
+                                    transcribeRecordingBtn.disabled = false;
+                                    transcribeRecordingBtn.onclick = function () {
+                                        transcribeRecording(callConnectionId);
+                                    };
+                                }
+                            }
+                        }
                     } else {
                         recordingPlayer.style.display = "none";
                         recordingPlayer.src = "";
                         noRecordingMsg.style.display = "block";
+
+                        if (recordingTranscriptSection) recordingTranscriptSection.style.display = "none";
                     }
                 }
 
@@ -1208,6 +1248,39 @@
             })
             .catch(function (err) {
                 console.error("Error loading call detail:", err);
+            });
+    }
+
+    function transcribeRecording(callConnectionId) {
+        var recordingTranscriptText = document.getElementById("recordingTranscriptText");
+        var recordingTranscriptLoading = document.getElementById("recordingTranscriptLoading");
+        var transcribeRecordingBtn = document.getElementById("transcribeRecordingBtn");
+
+        if (transcribeRecordingBtn) {
+            transcribeRecordingBtn.disabled = true;
+        }
+        if (recordingTranscriptLoading) {
+            recordingTranscriptLoading.classList.remove("d-none");
+        }
+
+        fetch(apiBaseUrl() + "/api/CallHistory/" + callConnectionId + "/transcribe", {
+            method: "POST"
+        })
+            .then(function (resp) {
+                if (!resp.ok) throw new Error("Transcription failed");
+                return resp.json();
+            })
+            .then(function (record) {
+                if (recordingTranscriptLoading) recordingTranscriptLoading.classList.add("d-none");
+                if (recordingTranscriptText) recordingTranscriptText.textContent = record.recordingTranscript || "";
+                if (transcribeRecordingBtn) transcribeRecordingBtn.style.display = "none";
+                showToast("Transcript saved.");
+            })
+            .catch(function (err) {
+                if (recordingTranscriptLoading) recordingTranscriptLoading.classList.add("d-none");
+                if (transcribeRecordingBtn) transcribeRecordingBtn.disabled = false;
+                showToast("Transcription failed.");
+                console.error("Error transcribing recording:", err);
             });
     }
 
@@ -1280,6 +1353,14 @@
                 promptArea.classList.toggle("d-none");
                 promptToggle.classList.toggle("expanded");
             };
+        }
+
+        // Track manual prompt editing
+        var promptInput = document.getElementById("prompt");
+        if (promptInput) {
+            promptInput.addEventListener("input", function () {
+                promptManuallyEdited = promptInput.value.trim().length > 0;
+            });
         }
 
         // Quick responses toggle

@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-outbound-callcenter-poc`  
 **Created**: 2026-02-20  
-**Updated**: 2026-02-21  
+**Updated**: 2026-02-25  
 **Status**: Draft  
 **Input**: User description: "A simple solution to simulate an outbound call center using Microsoft Azure services. An operator uses a web interface to place an outbound phone call to a real phone number. Once the call is connected, an AI-powered virtual agent conducts the conversation in real time using voice, following a user-defined script/prompt."
 
@@ -373,9 +373,44 @@ The web application is redesigned as a professional, enterprise-grade call opera
 - **FR-040**: The call initiation form MUST support an optional contact name field alongside each phone number input.
 - **FR-041**: When a contact name is provided, the system MUST prepend a name-aware instruction to the AI's system prompt so the AI greets the recipient by name before proceeding with the campaign script.
 - **FR-042**: The `CallRecord` MUST include the contact name (if provided) and display it in call history views.
+- **FR-043**: The system MUST persist call history records to Azure Blob Storage so they survive API restarts and deployments. The `BlobServiceClient` configuration MUST be derived automatically from the `BlobContainer` URL if `BlobStorage:AccountUri` is not explicitly set.
+- **FR-044**: The recording download endpoint MUST download recording files directly from the ACS recording Blob Storage container (configured via `BlobContainer`), searching for blobs matching the recording ID prefix, rather than using `DownloadStreamingAsync` which requires a content location URL from Event Grid.
+- **FR-045**: When the operator selects a campaign, the prompt override textarea MUST be cleared and the campaign's AI behavior instructions MUST be shown in a visible preview area. The prompt override MUST only be sent to the API if the operator explicitly types a custom prompt, not if it was auto-populated by the previous campaign.
+- **FR-046**: The `CallHistorySummary` MUST include a `HasRecording` boolean so the frontend can show a recording indicator icon on history list items.
 
 ### Additional Success Criteria
 
 - **SC-019**: Recordings for completed calls are playable via the audio player in the call detail view within 3 seconds of clicking play.
 - **SC-020**: When a contact name is provided, the AI agent uses the name in its greeting within the first sentence of the conversation in 100% of test attempts.
 - **SC-021**: After configuring `AzureOpenAI__ChatDeployment` on Azure, sentiment dots appear on all new transcript entries during live calls, and the sentiment graph line moves in real time.
+- **SC-022**: Call history records persist across API restarts — after redeploying the API, previously completed calls appear in the history list on page load.
+- **SC-023**: When clicking on a history item with a recording, the audio player loads and plays the recording MP3 file from Blob Storage.
+- **SC-024**: When selecting a campaign, the prompt preview area shows the campaign's AI behavior instructions. The prompt override textarea is cleared. The AI uses the campaign's instructions unless the operator explicitly types a custom prompt.
+
+---
+
+## Phase 18 Additions
+
+### User Story 11: Transcribe Existing Recordings Into History (Priority: P3)
+
+**As an** operator,  
+**I want to** transcribe call recordings that already exist in Blob Storage and attach the transcription to the historical call record,  
+**so that** historical calls can be reviewed with a readable transcript even if it was not captured live.
+
+#### Acceptance Scenarios
+
+| # | Given | When | Then |
+|---|-------|------|------|
+| 1 | A completed call exists in history with a recording and no recording transcript | The operator clicks "Transcribe" in the call detail view | The system transcribes the recording, persists the transcript into the call history record, and displays it in the UI without requiring a page refresh |
+| 2 | A completed call already has a recording transcript | The operator clicks "Transcribe" without forcing a re-run | The system returns the existing transcript and does not run transcription again |
+| 3 | A completed call has no recording available | The operator clicks "Transcribe" | The system returns a clear error and no transcript is saved |
+| 4 | Transcription fails (model unavailable, blob download fails, unsupported format) | The operator clicks "Transcribe" | The system returns a clear error and the historical call record remains unchanged |
+
+### Additional Functional Requirements
+
+- **FR-049**: The system MUST provide an API endpoint to transcribe a historical call recording by `callConnectionId` and persist the resulting text into the call history record.
+- **FR-050**: The call history detail view MUST expose an on-demand "Transcribe" action when a recording exists but no transcript is present, and MUST display the persisted transcript once available.
+
+### Additional Success Criteria
+
+- **SC-025**: For a call with an existing MP3/WAV recording, on-demand transcription completes and the transcript becomes visible in the call detail panel within 60 seconds for typical POC-length calls.

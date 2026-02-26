@@ -5,7 +5,8 @@ namespace ContactCenterPOC.Models
         Initiating,
         Ringing,
         Connected,
-        Disconnected
+        Disconnected,
+        Failed
     }
 
     public class ActiveCall

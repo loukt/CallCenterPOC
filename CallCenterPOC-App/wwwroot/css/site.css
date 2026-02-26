@@ -1350,6 +1350,42 @@ html, body {
   background: rgba(30,41,59,0.9);
 }
 
+/* ─── Campaign Prompt Preview ──────────────────────────────── */
+.campaign-prompt-preview {
+  background: rgba(15,23,42,0.6);
+  border: 1px solid rgba(100,116,139,0.25);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-top: 8px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+.prompt-preview-header {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: rgba(148,163,184,0.8);
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+}
+.prompt-preview-text {
+  font-size: 0.75rem;
+  color: rgba(203,213,225,0.9);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ─── Recording Indicator ──────────────────────────────────── */
+.recording-indicator {
+  font-size: 0.7rem;
+  margin-left: 4px;
+  opacity: 0.7;
+  vertical-align: middle;
+}
+
 /* ─── Utility ──────────────────────────────────────────────── */
 .btn-sm { font-size: 0.8rem; }
 .form-control-sm { font-size: 0.8rem; }

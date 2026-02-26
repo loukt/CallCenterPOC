@@ -1,5 +1,6 @@
 using ContactCenterPOC.Models;
 using ContactCenterPOC.Services;
+using Azure.Storage.Blobs;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -14,7 +15,8 @@ namespace CallCenterPOC_API.Tests.Unit
             {
                 ["AzureCommunicationServices:ConnectionString"] = "endpoint=https://fake.communication.azure.com/;accesskey=fakekey123456789012345678901234567890123=",
                 ["AzureCommunicationServices:PhoneNumber"] = "+15551234567",
-                ["CallbackUrl"] = "https://localhost:5001/api/Callback"
+                ["CallbackUrl"] = "https://localhost:5001/api/Callback",
+                ["BlobStorage:ContainerName"] = "test-container"
             };
             var configuration = new ConfigurationBuilder()
                 .AddInMemoryCollection(configValues)
@@ -22,12 +24,24 @@ namespace CallCenterPOC_API.Tests.Unit
 
             var loggerMock = new Mock<ILogger<CallService>>();
             var hubContextMock = new Mock<Microsoft.AspNetCore.SignalR.IHubContext<ContactCenterPOC.Hubs.TranscriptHub>>();
-            var campaignServiceMock = new Mock<CampaignService>(
-                new Mock<Azure.Storage.Blobs.BlobServiceClient>("UseDevelopmentStorage=true").Object,
+            var blobServiceClient = new BlobServiceClient("UseDevelopmentStorage=true");
+            var campaignService = new CampaignService(
+                blobServiceClient,
                 configuration,
                 new Mock<ILogger<CampaignService>>().Object);
 
-            var callService = new CallService(configuration, loggerMock.Object, hubContextMock.Object, campaignServiceMock.Object);
+            var callHistoryService = new CallHistoryService(
+                blobServiceClient,
+                configuration,
+                new Mock<ILogger<CallHistoryService>>().Object);
+
+            var callService = new CallService(
+                configuration,
+                loggerMock.Object,
+                hubContextMock.Object,
+                campaignService,
+                callHistoryService,
+                sentimentService: null);
 
             for (int i = 0; i < prePopulateCount; i++)
             {

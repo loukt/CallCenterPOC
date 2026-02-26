@@ -610,3 +610,98 @@ Work sequentially: Phase 1 → 2 → 3 → 4 → 5 → 6 → 7. Within each phas
 - [x] T112 [P] [US10] Update `CallControllerContractTests` or add new tests: verify (a) `POST /api/Call/initiate` with `contactNames` array is accepted, (b) `GET /api/CallHistory/{id}` returns `contactName` field, (c) `GET /api/CallHistory/{id}/recording` returns 404 for non-existent recording.
 
 **Checkpoint**: Sentiment works on Azure (dots + graph update in real time). Operators can add contact names for personalized greetings. Historical call recordings are playable from the call detail panel.
+
+---
+
+## Phase 16: History Persistence, Recording Playback Fix, Campaign Prompt UX (Bug Fixes)
+
+**Purpose**: Fix three critical bugs found during production testing: (1) call history not surviving API restarts because Blob Storage was not configured, (2) recording download endpoint broken because it uses ACS `RecordingId` as a URL instead of downloading from Blob Storage, (3) campaign prompt not updating when clicking different campaigns.
+
+**Independent Test**: Deploy API → make a call → verify history survives page refresh and API restart. Click a completed call in history → play recording audio. Select different campaigns → verify prompt preview updates and old override text is cleared.
+
+### Notes
+- T113–T119 are Phase 16 tasks (history persistence, recording fix, campaign prompt UX)
+- Root cause of history loss: `BlobStorage:AccountUri` was never set on Azure, causing `BlobServiceClient` to use `UseDevelopmentStorage=true` fallback which silently fails
+- Root cause of recording failure: ACS `RecordingId` is an opaque string, not a download URL — `DownloadStreamingAsync(new Uri(recordingId))` throws
+- Root cause of campaign prompt: `selectCampaign()` only updates prompt if textarea is empty, and `initiateCall()` always sends the textarea content as `prompt` which overrides `campaignId` in the API
+
+### Blob Storage Config Fix
+
+- [x] T113 [FR-043] Update `ContactCenterPOC-API/Program.cs`: if neither `BlobStorage:ConnectionString` nor `BlobStorage:AccountUri` is set, derive `BlobStorage:AccountUri` from the `BlobContainer` URL by parsing the storage account base URL (e.g., `https://account.blob.core.windows.net/container` → `https://account.blob.core.windows.net`). Also set `BlobStorage__AccountUri` on the Azure App Service.
+
+### Recording Download Fix
+
+- [x] T114 [FR-044] [FR-046] Update `ContactCenterPOC-API/Controllers/CallHistoryController.cs`: replace `DownloadStreamingAsync(new Uri(recordingId))` with direct Blob download. Inject `BlobServiceClient`, read `BlobContainer` config to extract container name, search for blobs matching the recording ID prefix, and stream the first matching MP3 blob. Return 404 with helpful message if no recording blob found.
+- [x] T115 [P] [FR-046] Update `CallRecord.cs`: add `HasRecording` (bool) to `CallHistorySummary`. Update `CallHistoryService.ToSummary()`: set `HasRecording = !string.IsNullOrEmpty(record.RecordingId)`.
+
+### Campaign Prompt UX Fix
+
+- [x] T116 [FR-045] Update `CallCenterPOC-App/Pages/Index.cshtml`: add a campaign prompt preview section below the campaign cards — a read-only area that shows the selected campaign's AI behavior instructions. Initially hidden, shown when a campaign is selected.
+- [x] T117 [FR-045] Update `CallCenterPOC-App/wwwroot/js/site.js`: (a) In `selectCampaign()`, always clear the prompt override textarea and show the campaign's `aiBehaviorInstructions` in the preview area. (b) In `initiateCall()`, only include `prompt` in the request body if the prompt override textarea has user-typed text (track via a `promptManuallyEdited` flag). (c) Show a recording indicator icon (🎙) on history list items when `hasRecording` is true.
+- [x] T118 [P] Update `CallCenterPOC-App/wwwroot/css/site.css`: add styles for the campaign prompt preview area (read-only look, muted background, smaller font, max-height with overflow scroll).
+
+### Azure Configuration
+
+- [x] T119 Set `BlobStorage__AccountUri` on the `contactcenterpoc-api` Azure App Service. Enabled system-assigned Managed Identity, assigned Storage Blob Data Contributor role, fixed `BlobContainer` to be a URL (was incorrectly set to a connection string).
+
+**Checkpoint**: Call history persists across API restarts. Recording playback works from the call detail panel. Campaign prompt preview updates when selecting different campaigns, and prompt override only wins when explicitly typed.
+
+---
+
+## Phase 17 — Sentiment & History Production Fixes
+
+**Purpose**: Fix three production issues: (1) call history container name not derived from `BlobContainer` URL — defaults to nonexistent `callcenter-data` container, (2) sentiment analysis always returns Neutral because Azure OpenAI key-based auth is disabled but code uses `ApiKeyCredential`, (3) sentiment timeline uses single-message context — enhance with rolling 10-second window for richer analysis.
+
+**Independent Test**: Deploy API → make a call → verify call appears in history after page refresh. During a call, verify sentiment dots show Positive/Negative (not all Neutral). Verify sentiment timeline graph moves with the conversation.
+
+### Blob Container Name Fix
+
+- [x] T120 [FR-043] Update `ContactCenterPOC-API/Program.cs`: when deriving `BlobStorage:AccountUri` from `BlobContainer` URL, also extract the container name from the URL path and set `BlobStorage:ContainerName` in configuration (e.g., `https://account.blob.core.windows.net/callsstorage` → container name `callsstorage`). This ensures `CallHistoryService` and `CampaignService` use the correct container.
+
+### Sentiment Auth Fix
+
+- [x] T121 [FR-047] Update `ContactCenterPOC-API/Services/SentimentAnalysisService.cs`: remove `ApiKeyCredential` branch — always use `DefaultAzureCredential` for Azure OpenAI authentication. Key-based auth is disabled on the Azure OpenAI resource; managed identity is the correct auth method.
+- [x] T122 [FR-047] Assign "Cognitive Services OpenAI User" role to the API app's managed identity (`6ac6f2c6-cdad-4345-bb4a-f286434be5c4`) on the Azure OpenAI resource (`cogsermultiaccess`).
+
+### Rolling Sentiment Window
+
+- [x] T123 [FR-048] Update `ContactCenterPOC-API/Services/AzureOpenAIService.cs`: in `FireAndForgetSentiment()`, instead of analyzing only the current message text, aggregate all transcript entries from the last 10 seconds (from `ActiveCall.TranscriptEntries`) and analyze the concatenated text. This gives richer conversational context for more meaningful sentiment scores.
+
+### Deployment
+
+- [x] T124 Publish and deploy API to Azure. Restart app. Verify campaigns load (confirms container name fix). Verify 34 unit tests pass.
+
+**Checkpoint**: Call history persists to the correct blob container. Sentiment analysis works via managed identity (no more HTTP 403). Sentiment timeline reflects rolling 10-second conversational context.
+
+---
+
+## Phase 18: Transcribe Existing Recordings Into History (US11)
+
+**Purpose**: Operators can transcribe already-stored MP3/WAV recordings from Blob Storage and save the transcript into the historical call record for review.
+
+**Independent Test**: Pick a historical call with a recording. Open the call detail panel and click "Transcribe". Verify the transcript text appears and remains after page refresh (persisted to the call history JSON).
+
+### Models
+
+- [x] T125 [US11] Update `ContactCenterPOC-API/Models/CallRecord.cs`: add `RecordingTranscript` (string?) and `RecordingTranscribedAt` (DateTimeOffset?) fields.
+
+### Backend Services
+
+- [x] T126 [US11] Create `RecordingTranscriptionService` in `ContactCenterPOC-API/Services/RecordingTranscriptionService.cs`: download the recording audio from the configured recording container in Blob Storage and call Azure OpenAI audio transcription (multipart form-data upload).
+- [x] T127 [US11] Update `CallHistoryService` in `ContactCenterPOC-API/Services/CallHistoryService.cs`: add `SaveRecordingTranscriptAsync(callConnectionId, transcript)` and ensure the in-memory summary cache is updated idempotently (no duplicate summaries when resaving).
+
+### API
+
+- [x] T128 [US11] Add `POST /api/CallHistory/{callConnectionId}/transcribe?force=false` endpoint in `ContactCenterPOC-API/Controllers/CallHistoryController.cs`:
+  - If record not found or no recording exists → return 404/400 with a helpful message
+  - If transcript already exists and `force=false` → return existing record
+  - Otherwise → transcribe, persist transcript into call history JSON, return updated record
+
+### Frontend
+
+- [x] T129 [US11] Update `CallCenterPOC-App/Pages/Index.cshtml`: add a "Recording Transcript" section within the call detail panel (right panel) containing a Transcribe button and a read-only transcript display area.
+- [x] T130 [US11] Update `CallCenterPOC-App/wwwroot/js/site.js`: wire up the Transcribe button to call the new API endpoint, show progress/errors, and render the persisted transcript in the detail view.
+
+### Documentation
+
+- [x] T131 [US11] Update quickstart.md with required configuration keys for transcription (Azure OpenAI endpoint + transcription deployment name) and document the operator workflow for on-demand transcription.

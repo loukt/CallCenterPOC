@@ -1,0 +1,9 @@
+<step title="Incoming Request" date="2025-02-04T09:06:48.113" instance="c18faf" url="/api/deployments/latest?deployer=Push-Deployer&amp;time=2025-02-04_09-06-48Z" method="GET" type="request" pid="87,1,30" Host="contactcenterpoc-app.scm.azurewebsites.net" User-Agent="websdk/WebSdk_VisualStudio_17.0 websdk/WebSdk_VisualStudio_17.0" Authorization="Bea..." Cookie="ARRAffinity=c18fafffbcc9ac106cdb29fe7fa6268c9f45f2dedc198182aade6101f2d49d68; ARRAffinitySameSite=c18fafffbcc9ac106cdb29fe7fa6268c9f45f2dedc198182aade6101f2d49d68" X-ARR-LOG-ID="2bba5560-1958-4b67-9350-c5805000d598" CLIENT-IP="167.220.255.7:32432" X-SITE-DEPLOYMENT-ID="contactcenterpoc-app" WAS-DEFAULT-HOSTNAME="contactcenterpoc-app.scm.azurewebsites.net" X-Forwarded-Proto="https" X-AppService-Proto="https" X-Forwarded-TlsVersion="1.3" X-WAWS-Unencoded-URL="/api/deployments/latest?deployer=Push-Deployer&amp;time=2025-02-04_09-06-48Z" X-Client-IP="167.220.255.7" X-Client-Port="32432" >
+  <step title="DeploymentService.GetResult" date="2025-02-04T09:06:49.032" >
+    <step title="DeploymentService.GetLatestDeployment" date="2025-02-04T09:06:49.038" >
+      <step title="DeploymentManager.GetResults" date="2025-02-04T09:06:49.043" /><!-- duration: 288ms -->
+      <step title="Deployment temp-b69ffeb0 is Pending" date="2025-02-04T09:06:49.337" /><!-- duration: 4ms -->
+    </step><!-- duration: 306ms -->
+  </step><!-- duration: 316ms -->
+  <step title="Outgoing response" date="2025-02-04T09:06:49.380" type="response" statusCode="202" statusText="Accepted" /><!-- duration: 4ms -->
+</step><!-- duration: 1274ms -->

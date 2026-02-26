@@ -9,6 +9,8 @@ namespace ContactCenterPOC.Models
         public string? ContactName { get; set; }
         public string Prompt { get; set; } = string.Empty;
         public string? RecordingId { get; set; }
+        public string? RecordingTranscript { get; set; }
+        public DateTimeOffset? RecordingTranscribedAt { get; set; }
         public TimeSpan Duration { get; set; }
         public SentimentLabel OverallSentiment { get; set; } = SentimentLabel.Neutral;
         public SentimentBreakdown SentimentBreakdown { get; set; } = new();
@@ -39,6 +41,7 @@ namespace ContactCenterPOC.Models
         public string? ContactName { get; set; }
         public string Duration { get; set; } = string.Empty;
         public string OverallSentiment { get; set; } = "Neutral";
+        public bool HasRecording { get; set; }
         public DateTimeOffset StartedAt { get; set; }
     }
 }

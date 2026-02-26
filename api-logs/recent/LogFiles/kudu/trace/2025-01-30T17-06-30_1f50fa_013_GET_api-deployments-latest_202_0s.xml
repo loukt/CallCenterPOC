@@ -1,0 +1,10 @@
+<step title="Incoming Request" date="2025-01-30T17:06:30.366" instance="1f50fa" url="/api/deployments/latest?deployer=Push-Deployer&amp;time=2025-01-30_17-06-22Z" method="GET" type="request" pid="86,1,56" Host="contactcenterpoc-api.scm.azurewebsites.net" User-Agent="websdk/WebSdk_VisualStudio_17.0 websdk/WebSdk_VisualStudio_17.0 websdk/WebSdk_VisualStudio_17.0 websdk/WebSdk_VisualStudio_17.0" Authorization="Bea..." Cookie="ARRAffinity=1f50fad77c81e1b5b071b77cac620c6fb65db1f309028733d7c05be6a1c1948a; ARRAffinitySameSite=1f50fad77c81e1b5b071b77cac620c6fb65db1f309028733d7c05be6a1c1948a" X-ARR-LOG-ID="7062a4a1-0d34-44ea-a713-c029ae13e397" CLIENT-IP="132.147.119.39:1947" X-SITE-DEPLOYMENT-ID="contactcenterpoc-api" WAS-DEFAULT-HOSTNAME="contactcenterpoc-api.scm.azurewebsites.net" X-Forwarded-Proto="https" X-AppService-Proto="https" X-Forwarded-TlsVersion="1.3" X-WAWS-Unencoded-URL="/api/deployments/latest?deployer=Push-Deployer&amp;time=2025-01-30_17-06-22Z" X-Client-IP="132.147.119.39" X-Client-Port="1947" >
+  <step title="Cleanup Xml Logs" date="2025-01-30T17:06:30.375" /><!-- duration: 23ms -->
+  <step title="DeploymentService.GetResult" date="2025-01-30T17:06:30.416" >
+    <step title="DeploymentService.GetLatestDeployment" date="2025-01-30T17:06:30.425" >
+      <step title="DeploymentManager.GetResults" date="2025-01-30T17:06:30.438" /><!-- duration: 296ms -->
+      <step title="Deployment 94bec16a-86e7-4412-b1b6-b315ef5c6484 is Building" date="2025-01-30T17:06:30.742" /><!-- duration: 7ms -->
+    </step><!-- duration: 332ms -->
+  </step><!-- duration: 350ms -->
+  <step title="Outgoing response" date="2025-01-30T17:06:30.775" type="response" statusCode="202" statusText="Accepted" /><!-- duration: 8ms -->
+</step><!-- duration: 424ms -->

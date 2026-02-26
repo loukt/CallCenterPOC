@@ -1,7 +1,7 @@
 # Quickstart: Outbound Call Center POC
 
 **Feature**: `001-outbound-callcenter-poc`  
-**Date**: 2026-02-20
+**Date**: 2026-02-25
 
 ## Prerequisites
 
@@ -36,10 +36,15 @@ Set the following in `appsettings.json` (non-secret):
 | `AzureOpenAI:EndpointUri` | Azure OpenAI endpoint URI | `https://your-resource.openai.azure.com/` |
 | `AzureOpenAI:DeploymentName` | Model deployment name (Realtime voice) | `gpt-4o-realtime-preview` |
 | `AzureOpenAI:ChatDeployment` | Model deployment name (Sentiment analysis) | `gpt-4o-mini` |
+| `AzureOpenAI:TranscriptionDeployment` | Model deployment name (Recording transcription) | `gpt-4o-mini-transcribe` or `whisper-1` |
+| `AzureOpenAI:TranscriptionApiVersion` | API version override for transcription endpoint (optional) | `2024-10-21` |
+| `AzureOpenAI:TranscriptionLanguage` | Optional language hint (ISO-639-1) | `en` |
 | `AzureOpenAI:SystemPrompt` | Default system prompt (fallback when no campaign/prompt selected) | `"You are an AI assistant..."` |
 | `AzureOpenAI:Version` | API version | `2024-10-01-preview` |
 | `BlobStorage:AccountUri` | Blob Storage account URI (Azure deployment with Managed Identity) | `https://yourstorage.blob.core.windows.net` |
 | `BlobStorage:ContainerName` | Container name for campaigns + call history | `callcenter-data` |
+
+**Note (Transcription Auth):** On-demand recording transcription uses `DefaultAzureCredential` (Entra ID) and does **not** use `AzureOpenAI:Key`. For local development, run `az login` and ensure your signed-in identity has access to the Azure OpenAI resource (e.g., “Cognitive Services OpenAI User”).
 
 ### CallCenterPOC-App (Frontend)
 
@@ -134,6 +139,16 @@ Each campaign has detailed AI behavior instructions (100+ characters) guiding th
 14. Click **End Call** to end the call, or wait for the 5-minute auto-timeout
 15. **Right panel**: Review completed calls — click any history item for details with sentiment breakdown bars, talk-time ratio, and full transcript
 
+#### Transcribe Existing Recordings (On-Demand)
+
+For historical calls that have a stored MP3/WAV recording in Blob Storage, you can attach a transcript to the call record:
+
+1. **Right panel (History)**: Expand a completed call
+2. In **Recording Transcript**, click **Transcribe**
+3. Wait for completion — the transcript text appears and is persisted into the call history JSON (remains after refresh)
+
+API endpoint (for troubleshooting): `POST /api/CallHistory/{callConnectionId}/transcribe?force=false`
+
 **Mobile/narrow screens (<992px):** The layout switches to a stacked view with a bottom **tab bar** (Campaigns / Live Call / History icons) for panel switching.
 
 ## Configuration Reference
@@ -147,6 +162,9 @@ Each campaign has detailed AI behavior instructions (100+ characters) guiding th
 | `AzureOpenAI:EndpointUri` | API | No | Yes | Azure OpenAI endpoint URI |
 | `AzureOpenAI:DeploymentName` | API | No | Yes | Realtime voice model deployment name |
 | `AzureOpenAI:ChatDeployment` | API | No | Yes | Chat model deployment for sentiment analysis (e.g., `gpt-4o-mini`) |
+| `AzureOpenAI:TranscriptionDeployment` | API | No | No | Audio transcription deployment name (e.g., `gpt-4o-mini-transcribe` or `whisper-1`) |
+| `AzureOpenAI:TranscriptionApiVersion` | API | No | No | Optional API version override for `/audio/transcriptions` |
+| `AzureOpenAI:TranscriptionLanguage` | API | No | No | Optional transcription language hint (ISO-639-1 like `en`) |
 | `AzureOpenAI:Version` | API | No | No | API version (defaults to latest preview) |
 | `AzureOpenAI:SystemPrompt` | API | No | No | Default fallback system prompt |
 | `BlobContainer` | API | No | No | Azure Blob Storage container URL for recordings |
@@ -167,3 +185,4 @@ After setup, verify the system works:
 5. Confirm: phone rings, AI speaks, you can respond, chat-bubble transcript with sentiment dots and live sentiment graph appears, call controls (end/mute/hold) work, quick responses are available
 6. **Right panel**: Verify the completed call appears in history — click it for details with sentiment breakdown, talk-time ratio, and full transcript
 7. **KPI Cards**: Verify Calls Today, Avg Duration, Sentiment, and Success Rate update after the call
+8. If the call has a recording: click **Transcribe** in the call detail panel and confirm the transcript persists after refresh

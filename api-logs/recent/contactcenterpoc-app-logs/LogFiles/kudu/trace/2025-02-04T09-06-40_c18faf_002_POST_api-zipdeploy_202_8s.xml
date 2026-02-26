@@ -1,0 +1,17 @@
+<step title="Incoming Request" date="2025-02-04T09:06:40.158" instance="c18faf" url="/api/zipdeploy?isAsync=true" method="POST" type="request" pid="87,1,23" Host="contactcenterpoc-app.scm.azurewebsites.net" User-Agent="websdk/WebSdk_VisualStudio_17.0" Authorization="Bea..." Content-Type="application/zip; charset=utf-8" Expect="100-continue" Content-Length="5369867" X-ARR-LOG-ID="5dd732e9-7f45-4546-8bd1-7ea43fe43db0" CLIENT-IP="167.220.255.7:32432" X-SITE-DEPLOYMENT-ID="contactcenterpoc-app" WAS-DEFAULT-HOSTNAME="contactcenterpoc-app.scm.azurewebsites.net" X-Forwarded-Proto="https" X-AppService-Proto="https" X-Forwarded-TlsVersion="1.3" X-WAWS-Unencoded-URL="/api/zipdeploy?isAsync=true" X-Client-IP="167.220.255.7" X-Client-Port="32432" Content-Encoding="utf-8" >
+  <step title="ZipPushDeploy" date="2025-02-04T09:06:45.841" >
+    <step title="ZipDeploy. Extract zip." date="2025-02-04T09:06:45.857" /><!-- duration: 5ms -->
+    <step title="None repository commit" date="2025-02-04T09:06:45.883" >
+      <step title="Commit id: 69631e83-af0e-472e-a1f0-32d1f0decf2f" date="2025-02-04T09:06:45.887" Message="N/A" AuthorName="N/A" AuthorEmail="N/A" /><!-- duration: 4ms -->
+    </step><!-- duration: 12ms -->
+    <step title="Starting PushDeployAsync" date="2025-02-04T09:06:45.900" /><!-- duration: 6ms -->
+    <step title="Writing artifact to /tmp/zipdeploy/eb719bc7-3e14-475d-8804-77985b8c93f3.zip" date="2025-02-04T09:06:47.593" >
+      <step title="Writing request body to artifacts at /tmp/zipdeploy/eb719bc7-3e14-475d-8804-77985b8c93f3.zip" date="2025-02-04T09:06:47.619" /><!-- duration: 6ms -->
+    </step><!-- duration: 159ms -->
+    <step title="Start deployment in the background" date="2025-02-04T09:06:47.814" >
+      <step title="Acquiring Deployment Lock" date="2025-02-04T09:06:47.840" /><!-- duration: 3ms -->
+      <step title="Acquired Deployment Lock" date="2025-02-04T09:06:47.904" /><!-- duration: 3ms -->
+    </step><!-- duration: 197ms -->
+  </step><!-- duration: 2178ms -->
+  <step title="Outgoing response" date="2025-02-04T09:06:48.030" type="response" statusCode="202" statusText="Accepted" /><!-- duration: 4ms -->
+</step><!-- duration: 7880ms -->

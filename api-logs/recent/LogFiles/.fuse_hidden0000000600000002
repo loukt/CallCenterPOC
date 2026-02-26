@@ -1,0 +1,40 @@
+2025-09-16T01:37:23.5752070Z Container start method called.
+2025-09-16T01:37:23.5755991Z Establishing network.
+2025-09-16T01:37:23.5762492Z Pulling image: appsvc/dotnetcore:9.0_20250709.6.tuxprod.
+2025-09-16T01:37:24.5850612Z Image appsvc/dotnetcore:9.0_20250709.6.tuxprod is pulled from registry 10.1.0.6:13209
+2025-09-16T01:37:24.5852619Z Container is starting.
+2025-09-16T01:37:24.5855080Z Establishing user namespace if not established already.
+2025-09-16T01:37:24.5861344Z Establishing network if not established already.
+2025-09-16T01:37:24.5862548Z Mounting volumes.
+2025-09-16T01:37:24.5865968Z Nested mountpoint 
+2025-09-16T01:37:24.6083263Z Nested mountpoint volatile/logs
+2025-09-16T01:37:24.6642800Z Nested mountpoint 
+2025-09-16T01:37:24.6738519Z Nested mountpoint 
+2025-09-16T01:37:24.6840103Z Nested mountpoint 
+2025-09-16T01:37:24.6845989Z Nested mountpoint 
+2025-09-16T01:37:24.6943994Z Nested mountpoint 
+2025-09-16T01:37:24.6952565Z Nested mountpoint 
+2025-09-16T01:37:24.7197675Z Nested mountpoint 
+2025-09-16T01:37:24.7408428Z Nested mountpoint 
+2025-09-16T01:37:26.0045370Z Creating container.
+2025-09-16T01:37:26.0235238Z Creating pipes for streaming container io.
+2025-09-16T01:37:26.0236968Z Creating stdout named pipe at /podr/container/pipe/1f70fe976a73_contactcenterpoc-api/stdout_79834a32684248159bed50b770ff4d83.
+2025-09-16T01:37:26.0252186Z Successfully created stdout named pipe at: /podr/container/pipe/1f70fe976a73_contactcenterpoc-api/stdout_79834a32684248159bed50b770ff4d83.
+2025-09-16T01:37:26.0264594Z Opening named pipe /podr/container/pipe/1f70fe976a73_contactcenterpoc-api/stdout_79834a32684248159bed50b770ff4d83 for reading in non-blocking mode.
+2025-09-16T01:37:26.0370260Z Successfully opened named pipe: /podr/container/pipe/1f70fe976a73_contactcenterpoc-api/stdout_79834a32684248159bed50b770ff4d83.
+2025-09-16T01:37:26.0376138Z Successfully removed non-blocking flag from /podr/container/pipe/1f70fe976a73_contactcenterpoc-api/stdout_79834a32684248159bed50b770ff4d83.
+2025-09-16T01:37:26.0537577Z Creating stderr named pipe at /podr/container/pipe/1f70fe976a73_contactcenterpoc-api/stderr_f4cff862e0bb48cc83ca8a355a036097.
+2025-09-16T01:37:26.0540106Z Successfully created stderr named pipe at: /podr/container/pipe/1f70fe976a73_contactcenterpoc-api/stderr_f4cff862e0bb48cc83ca8a355a036097.
+2025-09-16T01:37:26.0541261Z Opening named pipe /podr/container/pipe/1f70fe976a73_contactcenterpoc-api/stderr_f4cff862e0bb48cc83ca8a355a036097 for reading in non-blocking mode.
+2025-09-16T01:37:26.0542456Z Successfully opened named pipe: /podr/container/pipe/1f70fe976a73_contactcenterpoc-api/stderr_f4cff862e0bb48cc83ca8a355a036097.
+2025-09-16T01:37:26.0543316Z Successfully removed non-blocking flag from /podr/container/pipe/1f70fe976a73_contactcenterpoc-api/stderr_f4cff862e0bb48cc83ca8a355a036097.
+2025-09-16T01:37:26.0544518Z Creating container with image: appsvc/dotnetcore:9.0_20250709.6.tuxprod from registry: 10.1.0.6:13209 and fully qualified image name: 10.1.0.6:13209/appsvc/dotnetcore:9.0_20250709.6.tuxprod
+2025-09-16T01:37:27.2880784Z Starting container: 1f70fe976a73_contactcenterpoc-api.
+2025-09-16T01:37:27.3387779Z Starting watchers and probes.
+2025-09-16T01:37:27.3436752Z Starting metrics collection.
+2025-09-16T01:37:27.3486770Z Container is running.
+2025-09-16T01:37:30.5268509Z Container start method finished after 6951 ms.
+2025-09-16T01:37:46.8115937Z Site startup probe succeeded after 16.2435646 seconds.
+2025-09-16T01:37:47.0456974Z Site is running with deployment version: 69a33699-d9b9-4553-bcfc-e8e5e7944f9d
+2025-09-16T01:37:47.0486347Z Site started.
+2025-09-16T01:37:47.0701418Z Site is running with patch version: 9.0.7

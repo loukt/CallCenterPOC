@@ -2,7 +2,6 @@ using Azure.AI.OpenAI;
 using Azure.Identity;
 using ContactCenterPOC.Models;
 using OpenAI.Chat;
-using System.ClientModel;
 using System.Text.Json;
 
 namespace ContactCenterPOC.Services
@@ -22,7 +21,9 @@ namespace ContactCenterPOC.Services
             _logger = logger;
 
             var endpointUri = configuration["AzureOpenAI:EndpointUri"];
-            var chatDeployment = configuration["AzureOpenAI:ChatDeployment"];
+            var chatDeployment = configuration["AzureOpenAI:ChatDeployment"]
+                ?? configuration["AzureOpenAI:SentimentDeployment"]
+                ?? configuration["AzureOpenAI:DeploymentName"]; // fallback for older/partial configs
 
             if (string.IsNullOrEmpty(endpointUri) || string.IsNullOrEmpty(chatDeployment))
             {
@@ -31,18 +32,16 @@ namespace ContactCenterPOC.Services
                 return;
             }
 
+            if (string.IsNullOrEmpty(configuration["AzureOpenAI:ChatDeployment"]))
+            {
+                _logger.LogWarning("AzureOpenAI:ChatDeployment not set; using fallback deployment '{Deployment}' for sentiment.", chatDeployment);
+            }
+
             try
             {
-                var apiKey = configuration["AzureOpenAI:Key"];
-                AzureOpenAIClient aiClient;
-                if (!string.IsNullOrEmpty(apiKey) && apiKey != "xxxx" && apiKey != "xx")
-                {
-                    aiClient = new AzureOpenAIClient(new Uri(endpointUri), new ApiKeyCredential(apiKey));
-                }
-                else
-                {
-                    aiClient = new AzureOpenAIClient(new Uri(endpointUri), new DefaultAzureCredential());
-                }
+                // Always use DefaultAzureCredential (Managed Identity on Azure, Azure CLI locally).
+                // Key-based auth may be disabled on the Azure OpenAI resource.
+                AzureOpenAIClient aiClient = new AzureOpenAIClient(new Uri(endpointUri), new DefaultAzureCredential());
                 _chatClient = aiClient.GetChatClient(chatDeployment);
                 _logger.LogInformation("SentimentAnalysisService initialized with deployment: {Deployment}", chatDeployment);
             }
@@ -119,6 +118,40 @@ namespace ContactCenterPOC.Services
             }
             catch
             {
+                // Some models occasionally wrap JSON in extra text. Try extracting the first JSON object.
+                try
+                {
+                    var start = json.IndexOf('{');
+                    var end = json.LastIndexOf('}');
+                    if (start >= 0 && end > start)
+                    {
+                        var slice = json.Substring(start, end - start + 1);
+                        using var doc2 = JsonDocument.Parse(slice);
+                        var root2 = doc2.RootElement;
+
+                        var labelStr = root2.TryGetProperty("label", out var labelProp)
+                            ? labelProp.GetString()?.Trim() ?? "Neutral"
+                            : "Neutral";
+
+                        var confidence = root2.TryGetProperty("confidence", out var confProp)
+                            ? confProp.GetSingle()
+                            : 0f;
+
+                        var label = labelStr.ToLowerInvariant() switch
+                        {
+                            "positive" => SentimentLabel.Positive,
+                            "negative" => SentimentLabel.Negative,
+                            _ => SentimentLabel.Neutral
+                        };
+
+                        return new SentimentResult { Label = label, Confidence = confidence };
+                    }
+                }
+                catch
+                {
+                    // ignore
+                }
+
                 return new SentimentResult { Label = SentimentLabel.Neutral, Confidence = 0f };
             }
         }

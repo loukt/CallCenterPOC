@@ -1,0 +1,44 @@
+2025-09-16T01:37:27.3886217Z    _____                               
+2025-09-16T01:37:27.3917785Z   /  _  \ __________ _________   ____  
+2025-09-16T01:37:27.3918100Z  /  /_\  \\___   /  |  \_  __ \_/ __ \ 
+2025-09-16T01:37:27.3918167Z /    |    \/    /|  |  /|  | \/\  ___/ 
+2025-09-16T01:37:27.3918217Z \____|__  /_____ \____/ |__|    \___  >
+2025-09-16T01:37:27.3918295Z         \/      \/                  \/ 
+2025-09-16T01:37:27.3918395Z A P P   S E R V I C E   O N   L I N U X
+2025-09-16T01:37:27.3918438Z 
+2025-09-16T01:37:27.3918502Z Documentation: http://aka.ms/webapp-linux
+2025-09-16T01:37:27.3918564Z Dotnet quickstart: https://aka.ms/dotnet-qs
+2025-09-16T01:37:27.3918617Z ASP .NETCore Version: 9.0.7
+2025-09-16T01:37:27.3918671Z Note: Any data outside '/home' is not persisted
+2025-09-16T01:37:30.8358022Z Starting OpenBSD Secure Shell server: sshd.
+2025-09-16T01:37:30.8918164Z WEBSITES_INCLUDE_CLOUD_CERTS is not set to true.
+2025-09-16T01:37:30.9811408Z Updating certificates in /etc/ssl/certs...
+2025-09-16T01:37:35.3792417Z rehash: warning: skipping ca-certificates.crt,it does not contain exactly one certificate or CRL
+2025-09-16T01:37:35.4244947Z 4 added, 0 removed; done.
+2025-09-16T01:37:35.4245492Z Running hooks in /etc/ca-certificates/update.d...
+2025-09-16T01:37:35.4301729Z done.
+2025-09-16T01:37:35.4397601Z CA certificates copied and updated successfully.
+2025-09-16T01:37:35.5277827Z Starting periodic command scheduler: cron.
+2025-09-16T01:37:35.5308907Z Running oryx create-script -appPath /home/site/wwwroot -output /opt/startup/startup.sh -defaultAppFilePath /defaulthome/hostingstart/hostingstart.dll     -bindPort 8080 -bindPort2 '' -userStartupCommand '' 
+2025-09-16T01:37:35.6094240Z Could not find build manifest file at '/home/site/wwwroot/oryx-manifest.toml'
+2025-09-16T01:37:35.6094669Z Could not find operation ID in manifest. Generating an operation id...
+2025-09-16T01:37:35.6098383Z Build Operation ID: 4592c38d-e9a0-4aa5-9f70-13acd2e66740
+2025-09-16T01:37:36.0568773Z 
+2025-09-16T01:37:36.0569418Z Agent extension disabled
+2025-09-16T01:37:36.0569476Z Before if loop >> DotNet Runtime 
+2025-09-16T01:37:36.2889885Z DotNet Runtime 9.0Writing output script to '/opt/startup/startup.sh'
+2025-09-16T01:37:36.3964926Z Trying to find the startup DLL name...
+2025-09-16T01:37:36.3965810Z Found the startup D name: ContactCenterPOC-API.dll
+2025-09-16T01:37:36.3967639Z Running the command: dotnet "ContactCenterPOC-API.dll"
+2025-09-16T01:37:46.0922931Z warn: Microsoft.AspNetCore.StaticFiles.StaticFileMiddleware[16]
+2025-09-16T01:37:46.0923540Z       The WebRootPath was not found: /home/site/wwwroot/wwwroot. Static files may be unavailable.
+2025-09-16T01:37:46.1766713Z info: Microsoft.Hosting.Lifetime[14]
+2025-09-16T01:37:46.1767583Z       Now listening on: http://[::]:8080
+2025-09-16T01:37:46.1789176Z info: Microsoft.Hosting.Lifetime[0]
+2025-09-16T01:37:46.1789944Z       Application started. Press Ctrl+C to shut down.
+2025-09-16T01:37:46.1818052Z info: Microsoft.Hosting.Lifetime[0]
+2025-09-16T01:37:46.1818317Z       Hosting environment: Production
+2025-09-16T01:37:46.1822429Z info: Microsoft.Hosting.Lifetime[0]
+2025-09-16T01:37:46.1822602Z       Content root path: /home/site/wwwroot
+2025-09-16T01:37:46.7311859Z warn: Microsoft.AspNetCore.HttpsPolicy.HttpsRedirectionMiddleware[3]
+2025-09-16T01:37:46.7312611Z       Failed to determine the https port for redirect.

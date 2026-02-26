@@ -21,6 +21,7 @@ namespace ContactCenterPOC.Services
         private readonly IConfiguration _configuration;
         private readonly IHubContext<TranscriptHub> _hubContext;
         private readonly CampaignService _campaignService;
+        private readonly CallHistoryService _callHistoryService;
         private readonly SentimentAnalysisService? _sentimentService;
 
         // Thread-safe dictionaries for concurrent call handling
@@ -29,12 +30,13 @@ namespace ContactCenterPOC.Services
 
         public ConcurrentDictionary<string, ActiveCall> ActiveCalls => _activeCalls;
 
-        public CallService(IConfiguration configuration, ILogger<CallService> logger, IHubContext<TranscriptHub> hubContext, CampaignService campaignService, SentimentAnalysisService? sentimentService = null)
+        public CallService(IConfiguration configuration, ILogger<CallService> logger, IHubContext<TranscriptHub> hubContext, CampaignService campaignService, CallHistoryService callHistoryService, SentimentAnalysisService? sentimentService = null)
         {
             _logger = logger;
             _configuration = configuration;
             _hubContext = hubContext;
             _campaignService = campaignService;
+            _callHistoryService = callHistoryService;
             _sentimentService = sentimentService;
             var connectionString = configuration["AzureCommunicationServices:ConnectionString"];
             _callbackUri = configuration["CallbackUrl"] ?? throw new InvalidOperationException("CallbackUrl not configured");
@@ -217,6 +219,8 @@ namespace ContactCenterPOC.Services
 
             if (_activeCalls.TryRemove(callConnectionId, out var activeCall))
             {
+                await PersistHistoryIfNeededAsync(activeCall);
+
                 // Stop recording if active
                 if (!string.IsNullOrEmpty(activeCall.RecordingId))
                 {
@@ -229,6 +233,77 @@ namespace ContactCenterPOC.Services
 
             // Remove media handler
             _mediaHandlers.TryRemove(callConnectionId, out _);
+        }
+
+        private async Task PersistHistoryIfNeededAsync(ActiveCall activeCall)
+        {
+            try
+            {
+                // Only persist completed calls (matches original behavior which saved on CallDisconnected)
+                if (activeCall.Status != CallStatus.Connected && activeCall.Status != CallStatus.Disconnected)
+                {
+                    return;
+                }
+
+                var endedAt = DateTimeOffset.UtcNow;
+                var duration = endedAt - activeCall.StartedAt;
+                var entries = activeCall.TranscriptEntries;
+
+                // Overall sentiment = majority label among entries
+                var overallSentiment = SentimentLabel.Neutral;
+                if (entries.Count > 0)
+                {
+                    overallSentiment = entries
+                        .GroupBy(e => e.Sentiment.Label)
+                        .OrderByDescending(g => g.Count())
+                        .First().Key;
+                }
+
+                // Sentiment breakdown percentages
+                var breakdown = new SentimentBreakdown();
+                if (entries.Count > 0)
+                {
+                    float total = entries.Count;
+                    breakdown.PositivePercent = entries.Count(e => e.Sentiment.Label == SentimentLabel.Positive) / total * 100f;
+                    breakdown.NeutralPercent = entries.Count(e => e.Sentiment.Label == SentimentLabel.Neutral) / total * 100f;
+                    breakdown.NegativePercent = entries.Count(e => e.Sentiment.Label == SentimentLabel.Negative) / total * 100f;
+                }
+
+                // Talk time ratio (count of entries per speaker as proxy)
+                var talkTime = new TalkTimeRatio();
+                if (entries.Count > 0)
+                {
+                    float total = entries.Count;
+                    var aiCount = entries.Count(e => e.Speaker == SpeakerType.AI);
+                    var recipientCount = entries.Count(e => e.Speaker == SpeakerType.Recipient);
+                    talkTime.AiPercent = aiCount / total * 100f;
+                    talkTime.RecipientPercent = recipientCount / total * 100f;
+                }
+
+                var callRecord = new CallRecord
+                {
+                    CallConnectionId = activeCall.CallConnectionId,
+                    PhoneNumber = activeCall.TargetPhoneNumber,
+                    CampaignId = activeCall.CampaignId,
+                    CampaignTitle = activeCall.CampaignTitle,
+                    ContactName = activeCall.ContactName,
+                    Prompt = activeCall.Prompt,
+                    RecordingId = activeCall.RecordingId,
+                    Duration = duration,
+                    OverallSentiment = overallSentiment,
+                    SentimentBreakdown = breakdown,
+                    TalkTimeRatio = talkTime,
+                    TranscriptEntries = entries,
+                    StartedAt = activeCall.StartedAt,
+                    EndedAt = endedAt
+                };
+
+                await _callHistoryService.SaveCallRecordAsync(callRecord);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist call history during cleanup for {CallConnectionId}", activeCall.CallConnectionId);
+            }
         }
 
         public async Task StartRecordingAsync(string serverCallId, string callConnectionId)

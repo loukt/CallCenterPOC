@@ -298,7 +298,23 @@ namespace ContactCenterPOC.Services
             {
                 try
                 {
-                    var sentiment = await _sentimentService.AnalyzeAsync(entry.Text);
+                    // Build rolling 10-second context: aggregate recent transcript for better sentiment
+                    string textToAnalyze = entry.Text;
+                    if (_activeCalls != null && _activeCalls.TryGetValue(_callConnectionId, out var call))
+                    {
+                        var cutoff = entry.Timestamp.AddSeconds(-10);
+                        var recentEntries = call.TranscriptEntries
+                            .Where(e => e.Timestamp >= cutoff && e.Timestamp <= entry.Timestamp)
+                            .OrderBy(e => e.Timestamp)
+                            .ToList();
+
+                        if (recentEntries.Count > 1)
+                        {
+                            textToAnalyze = string.Join(" ", recentEntries.Select(e => e.Text));
+                        }
+                    }
+
+                    var sentiment = await _sentimentService.AnalyzeAsync(textToAnalyze);
                     entry.Sentiment = sentiment;
 
                     // Send SentimentUpdate event to the frontend

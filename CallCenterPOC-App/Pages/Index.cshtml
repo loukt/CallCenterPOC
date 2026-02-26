@@ -31,6 +31,17 @@
             </div>
             <input type="hidden" id="campaignId" value="" />
 
+            <!-- Campaign Prompt Preview -->
+            <div class="campaign-prompt-preview d-none" id="campaignPromptPreview">
+                <div class="prompt-preview-header">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16" class="me-1">
+                        <path d="M14 1a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H4.414A2 2 0 0 0 3 11.586l-2 2V2a1 1 0 0 1 1-1zM2 0a2 2 0 0 0-2 2v12.793a.5.5 0 0 0 .854.353l2.853-2.853A1 1 0 0 1 4.414 12H14a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2z"/>
+                    </svg>
+                    Campaign Prompt
+                </div>
+                <div class="prompt-preview-text" id="campaignPromptText"></div>
+            </div>
+
             <!-- Create Campaign -->
             <div class="form-section mt-2">
                 <button class="btn btn-outline-light btn-sm w-100 create-campaign-toggle" id="createCampaignToggle">
@@ -333,6 +344,16 @@
                         <audio id="recordingPlayer" controls preload="none" class="recording-audio-player">
                             Your browser does not support audio playback.
                         </audio>
+                    </div>
+
+                    <!-- Recording Transcript (generated on-demand) -->
+                    <div id="recordingTranscriptSection" class="mt-2" style="display:none;">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <small class="text-muted">Recording Transcript</small>
+                            <button id="transcribeRecordingBtn" type="button" class="btn btn-sm btn-outline-primary">Transcribe</button>
+                        </div>
+                        <div id="recordingTranscriptLoading" class="text-muted small py-2 d-none">Transcribing…</div>
+                        <pre id="recordingTranscriptText" class="small mb-0" style="white-space:pre-wrap;"></pre>
                     </div>
                     <div id="noRecordingMsg" class="text-muted small py-2 text-center" style="display:none;">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16" class="me-1">

@@ -1,0 +1,14 @@
+<step title="Incoming Request" date="2026-02-23T04:34:27.363" instance="8d9e2a" url="/api/zipdeploy?isAsync=true" method="POST" type="request" pid="832,1,22" Accept="*/*" Host="contactcenterpoc-app.scm.azurewebsites.net" User-Agent="AZURECLI/2.70.0 (MSI)" Accept-Encoding="gzip, deflate" Authorization="Bas..." Cache-Control="no-cache" Content-Type="application/octet-stream" Cookie="ARRAffinity=8d9e2a936c95dd849e4c0dae43b408c0ae869fcd34aeaf84a36fa1ee3cdf62cf; ARRAffinitySameSite=8d9e2a936c95dd849e4c0dae43b408c0ae869fcd34aeaf84a36fa1ee3cdf62cf" Content-Length="5496043" x-ms-client-request-id="e6f06df5-1070-11f1-b148-c4cb76905937" x-ms-artifact-checksum="4ba06172a3b15f56f31d14aa8cf8281677699225d260acebd29ef571b44b068c" X-ARR-LOG-ID="e6f06df5-1070-11f1-b148-c4cb76905937" CLIENT-IP="4.194.122.162:27588" X-SITE-DEPLOYMENT-ID="contactcenterpoc-app" WAS-DEFAULT-HOSTNAME="contactcenterpoc-app.scm.azurewebsites.net" X-Forwarded-Proto="https" X-AppService-Proto="https" X-Forwarded-TlsVersion="1.3" X-WAWS-Unencoded-URL="/api/zipdeploy?isAsync=true" X-Client-IP="4.194.122.162" X-Client-Port="27588" >
+  <step title="ZipPushDeploy" date="2026-02-23T04:34:27.370" >
+    <step title="ZipDeploy. Extract zip." date="2026-02-23T04:34:27.378" /><!-- duration: 6ms -->
+    <step title="Starting PushDeployAsync" date="2026-02-23T04:34:27.393" /><!-- duration: 3ms -->
+    <step title="Writing artifact to /tmp/zipdeploy/8553e669-8b2a-4ef1-94e6-110eb628ad84.zip" date="2026-02-23T04:34:27.407" >
+      <step title="Writing multipart request body to /tmp/zipdeploy/8553e669-8b2a-4ef1-94e6-110eb628ad84.zip" date="2026-02-23T04:34:27.410" /><!-- duration: 2ms -->
+    </step><!-- duration: 292ms -->
+    <step title="Start deployment in the background" date="2026-02-23T04:34:27.713" >
+      <step title="Acquiring Deployment Lock" date="2026-02-23T04:34:27.722" /><!-- duration: 4ms -->
+      <step title="Acquired Deployment Lock" date="2026-02-23T04:34:27.757" /><!-- duration: 5ms -->
+    </step><!-- duration: 124ms -->
+  </step><!-- duration: 474ms -->
+  <step title="Outgoing response" date="2026-02-23T04:34:27.850" type="response" statusCode="202" statusText="Accepted" /><!-- duration: 3ms -->
+</step><!-- duration: 494ms -->

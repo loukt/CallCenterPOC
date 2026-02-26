@@ -1,0 +1,4 @@
+<step title="Incoming Request" date="2025-01-30T18:05:30.736" instance="40b45f" url="/api/logs/docker" method="GET" type="request" pid="86,1,7" Host="contactcenterpoc-api.scm.azurewebsites.net" Authorization="Bas..." X-ARR-LOG-ID="99b33c5b-0fe0-4305-a313-72b1e7464643" CLIENT-IP="20.212.64.4:3586" X-SITE-DEPLOYMENT-ID="contactcenterpoc-api" WAS-DEFAULT-HOSTNAME="contactcenterpoc-api.scm.azurewebsites.net" X-MS-PLATFORM-INTERNAL="True" X-Forwarded-Proto="https" X-AppService-Proto="https" X-Forwarded-TlsVersion="1.3" X-WAWS-Unencoded-URL="/api/logs/docker" X-Client-IP="20.212.64.4" X-Client-Port="3586" >
+  <step title="DiagnosticsController.GetDockerLogs" date="2025-01-30T18:05:31.631" /><!-- duration: 41ms -->
+  <step title="Outgoing response" date="2025-01-30T18:05:31.732" type="response" statusCode="200" statusText="OK" /><!-- duration: 4ms -->
+</step><!-- duration: 1006ms -->

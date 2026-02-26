@@ -62,70 +62,36 @@ namespace ContactCenterPOC.Controllers
 
                     await _callService.StartRecordingAsync(@event.ServerCallId, @event.CallConnectionId);
                 }
+                else if (callbackEvent.Type.Contains("CreateCallFailed"))
+                {
+                    _logger.LogWarning("Call {CallConnectionId} creation failed", @event.CallConnectionId);
+
+                    // Update ActiveCall status
+                    if (_callService.ActiveCalls.TryGetValue(@event.CallConnectionId, out var failedCall))
+                    {
+                        failedCall.Status = CallStatus.Failed;
+                    }
+
+                    // Push failure status via SignalR so the UI stops showing "Initiating"
+                    var failUpdate = new CallStatusUpdate
+                    {
+                        CallConnectionId = @event.CallConnectionId,
+                        Status = CallStatus.Failed,
+                        Timestamp = DateTimeOffset.UtcNow
+                    };
+                    await _hubContext.Clients.Group(@event.CallConnectionId)
+                        .SendAsync("CallStatusChanged", failUpdate);
+
+                    await _callService.CleanupCall(@event.CallConnectionId);
+                }
                 else if (callbackEvent.Type.Contains("CallDisconnected"))
                 {
                     _logger.LogInformation("Call {CallConnectionId} disconnected", @event.CallConnectionId);
 
-                    // Persist call record BEFORE cleanup removes the ActiveCall
+                    // Mark status if still present; persistence happens during cleanup
                     if (_callService.ActiveCalls.TryGetValue(@event.CallConnectionId, out var activeCall))
                     {
                         activeCall.Status = CallStatus.Disconnected;
-
-                        // Build CallRecord with analytics
-                        var endedAt = DateTimeOffset.UtcNow;
-                        var duration = endedAt - activeCall.StartedAt;
-                        var entries = activeCall.TranscriptEntries;
-
-                        // Overall sentiment = majority label among entries
-                        var overallSentiment = SentimentLabel.Neutral;
-                        if (entries.Count > 0)
-                        {
-                            var groups = entries.GroupBy(e => e.Sentiment.Label)
-                                                .OrderByDescending(g => g.Count())
-                                                .ToList();
-                            overallSentiment = groups.First().Key;
-                        }
-
-                        // Sentiment breakdown percentages
-                        var breakdown = new SentimentBreakdown();
-                        if (entries.Count > 0)
-                        {
-                            float total = entries.Count;
-                            breakdown.PositivePercent = entries.Count(e => e.Sentiment.Label == SentimentLabel.Positive) / total * 100f;
-                            breakdown.NeutralPercent = entries.Count(e => e.Sentiment.Label == SentimentLabel.Neutral) / total * 100f;
-                            breakdown.NegativePercent = entries.Count(e => e.Sentiment.Label == SentimentLabel.Negative) / total * 100f;
-                        }
-
-                        // Talk time ratio (count of entries per speaker as proxy)
-                        var talkTime = new TalkTimeRatio();
-                        if (entries.Count > 0)
-                        {
-                            float total = entries.Count;
-                            var aiCount = entries.Count(e => e.Speaker == SpeakerType.AI);
-                            var recipientCount = entries.Count(e => e.Speaker == SpeakerType.Recipient);
-                            talkTime.AiPercent = aiCount / total * 100f;
-                            talkTime.RecipientPercent = recipientCount / total * 100f;
-                        }
-
-                        var callRecord = new CallRecord
-                        {
-                            CallConnectionId = activeCall.CallConnectionId,
-                            PhoneNumber = activeCall.TargetPhoneNumber,
-                            CampaignId = activeCall.CampaignId,
-                            CampaignTitle = activeCall.CampaignTitle,
-                            ContactName = activeCall.ContactName,
-                            Prompt = activeCall.Prompt,
-                            RecordingId = activeCall.RecordingId,
-                            Duration = duration,
-                            OverallSentiment = overallSentiment,
-                            SentimentBreakdown = breakdown,
-                            TalkTimeRatio = talkTime,
-                            TranscriptEntries = entries,
-                            StartedAt = activeCall.StartedAt,
-                            EndedAt = endedAt
-                        };
-
-                        await _callHistoryService.SaveCallRecordAsync(callRecord);
                     }
 
                     // Push status update via SignalR

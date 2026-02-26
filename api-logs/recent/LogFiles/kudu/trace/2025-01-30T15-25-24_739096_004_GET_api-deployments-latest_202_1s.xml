@@ -1,0 +1,9 @@
+<step title="Incoming Request" date="2025-01-30T15:25:24.315" instance="739096" url="/api/deployments/latest?deployer=ms-azuretools-vscode&amp;time=2025-01-30_15-25-23Z" method="GET" type="request" pid="86,1,16" Host="contactcenterpoc-api.scm.azurewebsites.net" User-Agent="vscode-azureappservice/0.25.4 core-rest-pipeline/1.16.3 Node/20.18.1 OS/(x64-Windows_NT-10.0.26100)" Accept-Encoding="gzip,deflate" Accept-Language="en" Authorization="Bea..." x-ms-correlation-request-id="f4fe3b31-b461-4847-85d3-7752bf3f412b" x-ms-client-request-id="b21f0c74-c171-4cf5-a8e1-1953b7a49410" X-ARR-LOG-ID="b21f0c74-c171-4cf5-a8e1-1953b7a49410" CLIENT-IP="132.147.119.39:3200" X-SITE-DEPLOYMENT-ID="contactcenterpoc-api" WAS-DEFAULT-HOSTNAME="contactcenterpoc-api.scm.azurewebsites.net" X-Forwarded-Proto="https" X-AppService-Proto="https" X-Forwarded-TlsVersion="1.3" X-WAWS-Unencoded-URL="/api/deployments/latest?deployer=ms-azuretools-vscode&amp;time=2025-01-30_15-25-23Z" X-Client-IP="132.147.119.39" X-Client-Port="3200" >
+  <step title="DeploymentService.GetResult" date="2025-01-30T15:25:24.494" >
+    <step title="DeploymentService.GetLatestDeployment" date="2025-01-30T15:25:24.503" >
+      <step title="DeploymentManager.GetResults" date="2025-01-30T15:25:24.507" /><!-- duration: 427ms -->
+      <step title="Deployment temp-c47803a9 is Pending" date="2025-01-30T15:25:24.943" /><!-- duration: 2ms -->
+    </step><!-- duration: 450ms -->
+  </step><!-- duration: 469ms -->
+  <step title="Outgoing response" date="2025-01-30T15:25:25.066" type="response" statusCode="202" statusText="Accepted" /><!-- duration: 8ms -->
+</step><!-- duration: 761ms -->

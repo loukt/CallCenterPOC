@@ -11,6 +11,53 @@ builder.Services.AddSingleton<CallService>();
 // Register BlobServiceClient for campaign + call history persistence
 var blobConnectionString = builder.Configuration["BlobStorage:ConnectionString"];
 var blobAccountUri = builder.Configuration["BlobStorage:AccountUri"];
+var configuredContainerName = builder.Configuration["BlobStorage:ContainerName"];
+
+static bool IsPlaceholderContainerName(string? containerName)
+{
+    return string.IsNullOrWhiteSpace(containerName) ||
+           string.Equals(containerName, "callcenter-data", StringComparison.OrdinalIgnoreCase);
+}
+
+// Ensure container name is set when a BlobContainer URL is provided (common in Azure)
+// Example: https://account.blob.core.windows.net/container
+var blobContainerUrlForDerivation = builder.Configuration["BlobContainer"];
+if (!string.IsNullOrEmpty(blobContainerUrlForDerivation) && Uri.TryCreate(blobContainerUrlForDerivation, UriKind.Absolute, out var derivedContainerUri))
+{
+    // Extract container name from path (e.g. /callsstorage → callsstorage)
+    var derivedContainerName = derivedContainerUri.AbsolutePath.Trim('/');
+    if (!string.IsNullOrEmpty(derivedContainerName) && IsPlaceholderContainerName(configuredContainerName))
+    {
+        builder.Configuration["BlobStorage:ContainerName"] = derivedContainerName;
+        configuredContainerName = derivedContainerName;
+    }
+
+    // If account URI is not explicitly set, derive it from the container URL
+    if (string.IsNullOrEmpty(blobAccountUri))
+    {
+        blobAccountUri = $"{derivedContainerUri.Scheme}://{derivedContainerUri.Host}";
+    }
+}
+
+// Derive BlobStorage:AccountUri and ContainerName from BlobContainer URL if not explicitly set
+if (string.IsNullOrEmpty(blobConnectionString) && string.IsNullOrEmpty(blobAccountUri))
+{
+    var blobContainerUrl = builder.Configuration["BlobContainer"];
+    if (!string.IsNullOrEmpty(blobContainerUrl) && Uri.TryCreate(blobContainerUrl, UriKind.Absolute, out var containerUri))
+    {
+        // Extract storage account base URL: https://account.blob.core.windows.net
+        blobAccountUri = $"{containerUri.Scheme}://{containerUri.Host}";
+
+        // Extract container name from path (e.g. /callsstorage → callsstorage)
+        var containerName = containerUri.AbsolutePath.Trim('/');
+        if (!string.IsNullOrEmpty(containerName) && IsPlaceholderContainerName(configuredContainerName))
+        {
+            builder.Configuration["BlobStorage:ContainerName"] = containerName;
+            configuredContainerName = containerName;
+        }
+    }
+}
+
 if (!string.IsNullOrEmpty(blobConnectionString))
 {
     // Local dev: use connection string
@@ -30,6 +77,11 @@ else
 builder.Services.AddSingleton<CampaignService>();
 builder.Services.AddSingleton<SentimentAnalysisService>();
 builder.Services.AddSingleton<CallHistoryService>();
+builder.Services.AddHttpClient("AzureOpenAITranscription", client =>
+{
+    client.Timeout = TimeSpan.FromMinutes(10);
+});
+builder.Services.AddSingleton<RecordingTranscriptionService>();
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
@@ -37,12 +89,40 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddSignalR();
 
 // CORS policy for frontend SignalR connections
-var frontendOrigin = builder.Configuration["FrontendOrigin"] ?? "https://localhost:5002";
+static string NormalizeOrigin(string origin)
+{
+    return origin.Trim().TrimEnd('/');
+}
+
+static string[] SplitOrigins(string origins)
+{
+    return origins
+        .Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Select(NormalizeOrigin)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+}
+
+var configuredOrigins = builder.Configuration.GetSection("FrontendOrigins").Get<string[]>();
+var configuredOrigin = builder.Configuration["FrontendOrigin"];
+
+var frontendOrigins = (configuredOrigins is { Length: > 0 })
+    ? configuredOrigins.Select(NormalizeOrigin).ToArray()
+    : (!string.IsNullOrWhiteSpace(configuredOrigin)
+        ? SplitOrigins(configuredOrigin)
+        : new[]
+        {
+            "http://localhost:5002",
+            "https://localhost:5002",
+            "http://127.0.0.1:5002",
+            "https://127.0.0.1:5002"
+        });
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins(frontendOrigin)
+        policy.WithOrigins(frontendOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();

@@ -1,0 +1,7 @@
+<step title="Incoming Request" date="2026-02-23T04:35:17.410" instance="8d9e2a" url="/api/deployments/b7173294-5a55-4ca9-a9ab-11653b320524/log" method="GET" type="request" pid="832,1,18" Accept="*/*" Host="contactcenterpoc-app.scm.azurewebsites.net" User-Agent="curl/8.16.0" Authorization="Bas..." X-ARR-LOG-ID="f4e87efc-9b49-4550-9d88-2ee2f154ae58" CLIENT-IP="4.194.122.136:29282" X-SITE-DEPLOYMENT-ID="contactcenterpoc-app" WAS-DEFAULT-HOSTNAME="contactcenterpoc-app.scm.azurewebsites.net" X-Forwarded-Proto="https" X-AppService-Proto="https" X-Forwarded-TlsVersion="1.3" X-WAWS-Unencoded-URL="/api/deployments/b7173294-5a55-4ca9-a9ab-11653b320524/log" X-Client-IP="4.194.122.136" X-Client-Port="29282" >
+  <step title="Cleanup Xml Logs" date="2026-02-23T04:35:17.413" /><!-- duration: 8ms -->
+  <step title="DeploymentService.GetLogEntry" date="2026-02-23T04:35:17.433" >
+    <step title="DeploymentManager.GetLogEntries(id:b7173294-5a55-4ca9-a9ab-11653b320524)" date="2026-02-23T04:35:17.436" /><!-- duration: 35ms -->
+  </step><!-- duration: 41ms -->
+  <step title="Outgoing response" date="2026-02-23T04:35:17.477" type="response" statusCode="200" statusText="OK" /><!-- duration: 3ms -->
+</step><!-- duration: 74ms -->
