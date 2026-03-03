@@ -25,7 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ContactCenterPOC-API\ContactCenterPOC-API.csproj" />
+    <ProjectReference Include="..\ContactCenter-API\ContactCenter-API.csproj" />
   </ItemGroup>
 
 </Project>

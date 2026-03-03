@@ -20,6 +20,7 @@ namespace ContactCenterPOC.Models
         private readonly string _callConnectionId;
         private readonly Func<string, Task>? _hangUpCallback;
         private readonly SentimentAnalysisService? _sentimentService;
+        private readonly EmotionAnalysisService? _emotionService;
         private readonly ConcurrentDictionary<string, ActiveCall>? _activeCalls;
 
         // Constructor to inject OpenAIClient, SignalR hub context, and call connection ID
@@ -31,7 +32,8 @@ namespace ContactCenterPOC.Models
             string callConnectionId,
             Func<string, Task>? hangUpCallback = null,
             SentimentAnalysisService? sentimentService = null,
-            ConcurrentDictionary<string, ActiveCall>? activeCalls = null)
+            ConcurrentDictionary<string, ActiveCall>? activeCalls = null,
+            EmotionAnalysisService? emotionService = null)
         {
             m_webSocket = webSocket;
             m_configuration = configuration;
@@ -42,6 +44,7 @@ namespace ContactCenterPOC.Models
             _callConnectionId = callConnectionId;
             _hangUpCallback = hangUpCallback;
             _sentimentService = sentimentService;
+            _emotionService = emotionService;
             _activeCalls = activeCalls;
         }
 
@@ -55,7 +58,7 @@ namespace ContactCenterPOC.Models
             }
 
             // start forwarder to AI model
-            m_aiServiceHandler = new AzureOpenAIService(this, callContextPrompt, m_configuration, _logger, _hubContext, _callConnectionId, _hangUpCallback, _sentimentService, _activeCalls);
+            m_aiServiceHandler = new AzureOpenAIService(this, callContextPrompt, m_configuration, _logger, _hubContext, _callConnectionId, _hangUpCallback, _sentimentService, _activeCalls, _emotionService);
 
             try
             {
@@ -96,7 +99,7 @@ namespace ContactCenterPOC.Models
             }
 
             // start forwarder to AI model
-            m_aiServiceHandler = new AzureOpenAIService(this, m_configuration, _logger, _hubContext, _callConnectionId, _hangUpCallback, _sentimentService, _activeCalls);
+            m_aiServiceHandler = new AzureOpenAIService(this, m_configuration, _logger, _hubContext, _callConnectionId, _hangUpCallback, _sentimentService, _activeCalls, _emotionService);
 
             try
             {

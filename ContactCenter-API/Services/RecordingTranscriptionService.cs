@@ -29,7 +29,7 @@ namespace ContactCenterPOC.Services
             _credential = new DefaultAzureCredential();
         }
 
-        public async Task<string> TranscribeRecordingAsync(string recordingId, CancellationToken cancellationToken)
+        public async Task<string> TranscribeRecordingAsync(string recordingId, CancellationToken cancellationToken, string? serverCallId = null, DateTimeOffset? startedAt = null)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(recordingId);
 
@@ -53,7 +53,7 @@ namespace ContactCenterPOC.Services
 
             var language = _configuration["AzureOpenAI:TranscriptionLanguage"]; // optional ISO-639-1 (e.g., 'en')
 
-            await using var audioStream = await DownloadRecordingAsync(recordingId, cancellationToken);
+            await using var audioStream = await DownloadRecordingAsync(recordingId, cancellationToken, serverCallId, startedAt);
             var fileName = GuessFileName(recordingId);
             var contentType = GuessContentType(fileName);
 
@@ -98,7 +98,7 @@ namespace ContactCenterPOC.Services
             return body;
         }
 
-        private async Task<Stream> DownloadRecordingAsync(string recordingId, CancellationToken cancellationToken)
+        private async Task<Stream> DownloadRecordingAsync(string recordingId, CancellationToken cancellationToken, string? serverCallId = null, DateTimeOffset? startedAt = null)
         {
             // If ACS ever provides an absolute blob URL (SAS or non-SAS), use it directly.
             if (Uri.TryCreate(recordingId, UriKind.Absolute, out var recordingUri) &&
@@ -131,11 +131,46 @@ namespace ContactCenterPOC.Services
 
             var containerClient = _blobServiceClient.GetBlobContainerClient(containerName);
 
+            // Strategy 1: If ServerCallId is available, search by prefix (most efficient)
+            if (!string.IsNullOrEmpty(serverCallId) && startedAt.HasValue)
+            {
+                var datePrefix = startedAt.Value.ToString("yyyyMMdd");
+                var prefix = $"{datePrefix}/{serverCallId}";
+                _logger.LogInformation("Searching for recording blob by prefix {Prefix}", prefix);
+
+                await foreach (var blobItem in containerClient.GetBlobsAsync(prefix: prefix, cancellationToken: cancellationToken))
+                {
+                    if (blobItem.Name.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ||
+                        blobItem.Name.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogInformation("Found recording blob via prefix: {BlobName}", blobItem.Name);
+                        var prefixBlob = containerClient.GetBlobClient(blobItem.Name);
+                        var prefixDownload = await prefixBlob.DownloadStreamingAsync(cancellationToken: cancellationToken);
+                        return prefixDownload.Value.Content;
+                    }
+                }
+            }
+
+            // Strategy 2: Search by recording ID (works for old format IDs that appear in blob names)
+            // Also try decoded base64 components for new format IDs
+            var searchTerms = new List<string> { recordingId };
+            try
+            {
+                var padded = recordingId.PadRight((recordingId.Length + 3) / 4 * 4, '=');
+                var decoded = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(padded));
+                using var doc = System.Text.Json.JsonDocument.Parse(decoded);
+                if (doc.RootElement.TryGetProperty("ResourceSpecificId", out var rsid) && rsid.GetString() is string rsidStr)
+                    searchTerms.Add(rsidStr);
+                if (doc.RootElement.TryGetProperty("PlatformEndpointId", out var peid) && peid.GetString() is string peidStr)
+                    searchTerms.Add(peidStr);
+            }
+            catch { /* Not base64/JSON — use original recording ID */ }
+
             BlobItem? best = null;
 
             await foreach (var blobItem in containerClient.GetBlobsAsync(cancellationToken: cancellationToken))
             {
-                if (!blobItem.Name.Contains(recordingId, StringComparison.OrdinalIgnoreCase))
+                if (!searchTerms.Any(term => blobItem.Name.Contains(term, StringComparison.OrdinalIgnoreCase)))
                 {
                     continue;
                 }

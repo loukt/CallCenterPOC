@@ -27,7 +27,10 @@
 
             <!-- Campaign Cards -->
             <div id="campaignList" class="campaign-card-list">
-                <div class="text-muted text-center py-3 small" id="campaignLoading">Loading campaigns...</div>
+                <div class="text-center py-3" id="campaignLoading">
+                    <div class="spinner-border spinner-border-sm" role="status"></div>
+                    <span class="ms-2 small text-muted">Loading campaigns...</span>
+                </div>
             </div>
             <input type="hidden" id="campaignId" value="" />
 
@@ -255,6 +258,38 @@
                     <canvas id="sentimentCanvas" class="sentiment-canvas" height="80"></canvas>
                 </div>
 
+                <!-- Live Operator Emotion Graph -->
+                <div class="sentiment-graph-container emotion-graph-container">
+                    <div class="sentiment-graph-header">
+                        <span class="small fw-bold">Operator Emotion</span>
+                        <span class="sentiment-legend">
+                            <span class="legend-dot" style="background:#4CAF50;"></span> Happy
+                            <span class="legend-dot" style="background:#9E9E9E;"></span> Neutral
+                            <span class="legend-dot" style="background:#FF9800;"></span> Frustrated
+                            <span class="legend-dot" style="background:#f44336;"></span> Angry
+                            <span class="legend-dot" style="background:#2196F3;"></span> Sad
+                            <span class="legend-dot" style="background:#9C27B0;"></span> Anxious
+                        </span>
+                    </div>
+                    <canvas id="operatorEmotionCanvas" class="sentiment-canvas" height="80"></canvas>
+                </div>
+
+                <!-- Live Customer Emotion Graph -->
+                <div class="sentiment-graph-container emotion-graph-container">
+                    <div class="sentiment-graph-header">
+                        <span class="small fw-bold">Customer Emotion</span>
+                        <span class="sentiment-legend">
+                            <span class="legend-dot" style="background:#4CAF50;"></span> Happy
+                            <span class="legend-dot" style="background:#9E9E9E;"></span> Neutral
+                            <span class="legend-dot" style="background:#FF9800;"></span> Frustrated
+                            <span class="legend-dot" style="background:#f44336;"></span> Angry
+                            <span class="legend-dot" style="background:#2196F3;"></span> Sad
+                            <span class="legend-dot" style="background:#9C27B0;"></span> Anxious
+                        </span>
+                    </div>
+                    <canvas id="customerEmotionCanvas" class="sentiment-canvas" height="80"></canvas>
+                </div>
+
                 <!-- Quick Responses (collapsible) -->
                 <div class="quick-responses-container" id="quickResponsesContainer">
                     <button class="quick-responses-toggle" id="quickResponsesToggle">
@@ -269,55 +304,15 @@
                     <div class="quick-responses-list d-none" id="quickResponsesList"></div>
                 </div>
             </div>
-        </div>
-    </section>
 
-    <!-- ═══ RIGHT PANEL: Active Call Details & History ═══ -->
-    <aside class="panel panel-right" id="panelRight">
-        <div class="panel-header">
-            <h6 class="panel-title">Call Details & History</h6>
-            <button class="btn btn-outline-light btn-sm panel-refresh-btn" onclick="loadCallHistory()" title="Refresh">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
-                    <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2z"/>
-                    <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466"/>
-                </svg>
-            </button>
-        </div>
-        <div class="panel-body">
-            <!-- Active Call Info (shown during call) -->
-            <div id="activeCallInfo" class="active-call-info d-none">
-                <div class="active-call-card">
-                    <h6 class="active-call-card-title">Active Call</h6>
-                    <div class="active-call-detail">
-                        <span class="detail-label">Phone:</span>
-                        <span id="rightPanelPhone">—</span>
-                    </div>
-                    <div class="active-call-detail">
-                        <span class="detail-label">Campaign:</span>
-                        <span id="rightPanelCampaign">—</span>
-                    </div>
-                    <div class="active-call-detail">
-                        <span class="detail-label">Status:</span>
-                        <span id="rightPanelStatus" class="badge bg-secondary">—</span>
-                    </div>
-                    <div class="active-call-detail">
-                        <span class="detail-label">Duration:</span>
-                        <span id="rightPanelTimer">00:00</span>
-                    </div>
+            <!-- Historical call detail (shown when selecting a call from history) -->
+            <!-- Call detail loading indicator -->
+            <div id="callDetailLoading" class="call-detail-inline d-none">
+                <div class="text-center py-4">
+                    <div class="spinner-border spinner-border-sm" role="status"></div>
+                    <span class="ms-2 small text-muted">Loading call details...</span>
                 </div>
             </div>
-
-            <!-- Call History List -->
-            <div id="historyLoading" class="text-center py-3">
-                <div class="spinner-border spinner-border-sm" role="status"></div>
-                <span class="ms-2 small">Loading...</span>
-            </div>
-            <div id="historyEmpty" class="text-center py-3 text-muted small d-none">
-                No call history yet.
-            </div>
-            <div id="historyList" class="history-list d-none"></div>
-
-            <!-- Inline call detail -->
             <div id="callDetailPanel" class="call-detail-inline d-none">
                 <div class="detail-header">
                     <span id="detailPhoneNumber" class="fw-bold"></span>
@@ -341,7 +336,7 @@
                         Call Recording
                     </h6>
                     <div class="recording-player-container">
-                        <audio id="recordingPlayer" controls preload="none" class="recording-audio-player">
+                        <audio id="recordingPlayer" controls preload="metadata" class="recording-audio-player">
                             Your browser does not support audio playback.
                         </audio>
                     </div>
@@ -399,9 +394,106 @@
                         </div>
                     </div>
                 </div>
+                <div class="detail-section" id="operatorTraitsSection" style="display:none;">
+                    <h6 class="detail-section-title">Operator Style</h6>
+                    <div class="breakdown-bar-row">
+                        <span class="bar-label">Empathy</span>
+                        <div class="progress flex-grow-1" style="height: 16px;">
+                            <div class="progress-bar bg-success" id="empathyBar" style="width: 0%">0%</div>
+                        </div>
+                    </div>
+                    <div class="breakdown-bar-row">
+                        <span class="bar-label">Energy</span>
+                        <div class="progress flex-grow-1" style="height: 16px;">
+                            <div class="progress-bar bg-warning" id="energyBar" style="width: 0%">0%</div>
+                        </div>
+                    </div>
+                </div>
                 <div class="detail-section">
                     <h6 class="detail-section-title">Transcript</h6>
                     <div class="detail-transcript" id="detailTranscript"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ RIGHT PANEL: Active Call Details & History ═══ -->
+    <aside class="panel panel-right" id="panelRight">
+        <div class="panel-header">
+            <h6 class="panel-title">Calls</h6>
+            <button class="btn btn-outline-light btn-sm panel-refresh-btn" onclick="loadCallHistory()" title="Refresh">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2z"/>
+                    <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466"/>
+                </svg>
+            </button>
+        </div>
+        <div class="panel-body">
+            <ul class="nav nav-tabs" id="rightPaneTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="live-calls-tab" data-bs-toggle="tab" data-bs-target="#liveCallsPane" type="button" role="tab" aria-controls="liveCallsPane" aria-selected="true">Live calls</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="history-calls-tab" data-bs-toggle="tab" data-bs-target="#historyCallsPane" type="button" role="tab" aria-controls="historyCallsPane" aria-selected="false">Historical calls</button>
+                </li>
+            </ul>
+            <div class="tab-content pt-2">
+                <div class="tab-pane fade show active" id="liveCallsPane" role="tabpanel" aria-labelledby="live-calls-tab" tabindex="0">
+                    <!-- Active Call Info (shown during call) -->
+                    <div id="activeCallInfo" class="active-call-info d-none">
+                        <div class="active-call-card">
+                            <h6 class="active-call-card-title">Active Call</h6>
+                            <div class="active-call-detail">
+                                <span class="detail-label">Phone:</span>
+                                <span id="rightPanelPhone">—</span>
+                            </div>
+                            <div class="active-call-detail">
+                                <span class="detail-label">Campaign:</span>
+                                <span id="rightPanelCampaign">—</span>
+                            </div>
+                            <div class="active-call-detail">
+                                <span class="detail-label">Status:</span>
+                                <span id="rightPanelStatus" class="badge bg-secondary">—</span>
+                            </div>
+                            <div class="active-call-detail">
+                                <span class="detail-label">Duration:</span>
+                                <span id="rightPanelTimer">00:00</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="liveCallsEmpty" class="text-center py-3 text-muted small">
+                        No live calls.
+                    </div>
+                    <div id="liveCallsList" class="history-list d-none"></div>
+                </div>
+
+                <div class="tab-pane fade" id="historyCallsPane" role="tabpanel" aria-labelledby="history-calls-tab" tabindex="0">
+                    <!-- Batch Process Button -->
+                    <div class="d-flex justify-content-end px-2 pt-2 pb-1">
+                        <button id="batchProcessBtn" type="button" class="btn btn-sm btn-outline-primary" title="Transcribe & analyze sentiment for all calls">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16" class="me-1">
+                                <path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2z"/>
+                                <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466"/>
+                            </svg>
+                            Process All
+                        </button>
+                    </div>
+                    <div id="batchProcessStatus" class="px-2 pb-1 d-none">
+                        <div class="small text-muted">
+                            <div class="spinner-border spinner-border-sm me-1" role="status"></div>
+                            <span id="batchProcessMsg">Processing calls...</span>
+                        </div>
+                    </div>
+                    <!-- Call History List -->
+                    <div id="historyLoading" class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                        <span class="ms-2 small">Loading...</span>
+                    </div>
+                    <div id="historyEmpty" class="text-center py-3 text-muted small d-none">
+                        No call history yet.
+                    </div>
+                    <div id="historyList" class="history-list d-none"></div>
                 </div>
             </div>
         </div>

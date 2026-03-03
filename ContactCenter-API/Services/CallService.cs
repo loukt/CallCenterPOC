@@ -23,6 +23,8 @@ namespace ContactCenterPOC.Services
         private readonly CampaignService _campaignService;
         private readonly CallHistoryService _callHistoryService;
         private readonly SentimentAnalysisService? _sentimentService;
+        private readonly EmotionAnalysisService? _emotionService;
+        private readonly OperatorStyleAnalysisService? _operatorStyleService;
 
         // Thread-safe dictionaries for concurrent call handling
         private readonly ConcurrentDictionary<string, ActiveCall> _activeCalls = new();
@@ -30,7 +32,7 @@ namespace ContactCenterPOC.Services
 
         public ConcurrentDictionary<string, ActiveCall> ActiveCalls => _activeCalls;
 
-        public CallService(IConfiguration configuration, ILogger<CallService> logger, IHubContext<TranscriptHub> hubContext, CampaignService campaignService, CallHistoryService callHistoryService, SentimentAnalysisService? sentimentService = null)
+        public CallService(IConfiguration configuration, ILogger<CallService> logger, IHubContext<TranscriptHub> hubContext, CampaignService campaignService, CallHistoryService callHistoryService, SentimentAnalysisService? sentimentService = null, EmotionAnalysisService? emotionService = null, OperatorStyleAnalysisService? operatorStyleService = null)
         {
             _logger = logger;
             _configuration = configuration;
@@ -38,6 +40,8 @@ namespace ContactCenterPOC.Services
             _campaignService = campaignService;
             _callHistoryService = callHistoryService;
             _sentimentService = sentimentService;
+            _emotionService = emotionService;
+            _operatorStyleService = operatorStyleService;
             var connectionString = configuration["AzureCommunicationServices:ConnectionString"];
             _callbackUri = configuration["CallbackUrl"] ?? throw new InvalidOperationException("CallbackUrl not configured");
             _callAutomationClient = new CallAutomationClient(connectionString);
@@ -159,6 +163,26 @@ namespace ContactCenterPOC.Services
 
                 _activeCalls[callConnectionId] = activeCall;
                 results.Add((callConnectionId, targetPhoneNumber));
+
+                // Persist an initial record immediately so the call appears in history even if
+                // the app restarts or callbacks are handled by a different instance.
+                await _callHistoryService.SaveCallRecordAsync(new CallRecord
+                {
+                    CallConnectionId = callConnectionId,
+                    PhoneNumber = targetPhoneNumber,
+                    CampaignId = resolvedCampaignId,
+                    CampaignTitle = resolvedCampaignTitle,
+                    ContactName = contactName,
+                    Prompt = callPrompt,
+                    RecordingId = null,
+                    Duration = TimeSpan.Zero,
+                    OverallSentiment = SentimentLabel.Neutral,
+                    SentimentBreakdown = new SentimentBreakdown(),
+                    TalkTimeRatio = new TalkTimeRatio(),
+                    TranscriptEntries = new List<TranscriptEntry>(),
+                    StartedAt = activeCall.StartedAt,
+                    EndedAt = activeCall.StartedAt
+                });
             }
 
             return results;
@@ -185,7 +209,7 @@ namespace ContactCenterPOC.Services
                     var handler = new AcsMediaStreamingHandler(
                         ws, _configuration, _logger, _hubContext,
                         callConnectionId, async (id) => await HangUpCall(id),
-                        _sentimentService, _activeCalls);
+                        _sentimentService, _activeCalls, _emotionService);
                     _mediaHandlers[callConnectionId] = handler;
                     await handler.ProcessWebSocketAsync(activeCall.Prompt);
                 }
@@ -280,9 +304,28 @@ namespace ContactCenterPOC.Services
                     talkTime.RecipientPercent = recipientCount / total * 100f;
                 }
 
+                // Compute operator style traits if service is available
+                OperatorStyleTraits? operatorTraits = null;
+                if (_operatorStyleService != null)
+                {
+                    var operatorEntries = entries.Where(e => e.Speaker == SpeakerType.AI).ToList();
+                    if (operatorEntries.Count > 0)
+                    {
+                        try
+                        {
+                            operatorTraits = await _operatorStyleService.AnalyzeAsync(operatorEntries);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to compute operator style traits for {CallConnectionId}", activeCall.CallConnectionId);
+                        }
+                    }
+                }
+
                 var callRecord = new CallRecord
                 {
                     CallConnectionId = activeCall.CallConnectionId,
+                    ServerCallId = activeCall.ServerCallId,
                     PhoneNumber = activeCall.TargetPhoneNumber,
                     CampaignId = activeCall.CampaignId,
                     CampaignTitle = activeCall.CampaignTitle,
@@ -293,6 +336,7 @@ namespace ContactCenterPOC.Services
                     OverallSentiment = overallSentiment,
                     SentimentBreakdown = breakdown,
                     TalkTimeRatio = talkTime,
+                    OperatorStyleTraits = operatorTraits,
                     TranscriptEntries = entries,
                     StartedAt = activeCall.StartedAt,
                     EndedAt = endedAt

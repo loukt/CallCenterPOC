@@ -93,6 +93,44 @@ namespace ContactCenterPOC.Controllers
                     {
                         activeCall.Status = CallStatus.Disconnected;
                     }
+                    else
+                    {
+                        // If we don't have in-memory state (e.g., scale-out or restart), update the persisted record.
+                        try
+                        {
+                            var now = DateTimeOffset.UtcNow;
+                            var record = await _callHistoryService.GetByIdAsync(@event.CallConnectionId);
+                            if (record == null)
+                            {
+                                record = new CallRecord
+                                {
+                                    CallConnectionId = @event.CallConnectionId,
+                                    PhoneNumber = string.Empty,
+                                    Prompt = string.Empty,
+                                    RecordingId = null,
+                                    Duration = TimeSpan.Zero,
+                                    OverallSentiment = SentimentLabel.Neutral,
+                                    SentimentBreakdown = new SentimentBreakdown(),
+                                    TalkTimeRatio = new TalkTimeRatio(),
+                                    TranscriptEntries = new List<TranscriptEntry>(),
+                                    StartedAt = now,
+                                    EndedAt = now
+                                };
+                            }
+                            else
+                            {
+                                record.EndedAt = now;
+                                var duration = record.EndedAt - record.StartedAt;
+                                record.Duration = duration < TimeSpan.Zero ? TimeSpan.Zero : duration;
+                            }
+
+                            await _callHistoryService.SaveCallRecordAsync(record);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to update persisted call record on disconnect for {CallConnectionId}", @event.CallConnectionId);
+                        }
+                    }
 
                     // Push status update via SignalR
                     var statusUpdate = new CallStatusUpdate

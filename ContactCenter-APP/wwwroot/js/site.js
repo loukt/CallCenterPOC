@@ -9,7 +9,7 @@
 
     // ─── State ───────────────────────────────────────────────
     var connection = null;
-    // callId -> { phoneNumber, campaignTitle, status, transcriptEntries, sentimentData, timerInterval, timerSeconds }
+    // callId -> { phoneNumber, campaignTitle, status, transcriptEntries, sentimentData, operatorEmotionData, customerEmotionData, timerInterval, timerSeconds }
     var calls = {};
     var activeTabId = null;
     var selectedCampaign = null; // { id, title, description, ... }
@@ -117,12 +117,20 @@
         var list = document.getElementById("campaignList");
         if (!list) return;
 
+        // Show loading spinner
+        list.innerHTML = '<div class="text-center py-3" id="campaignLoading"><div class="spinner-border spinner-border-sm" role="status"></div><span class="ms-2 small text-muted">Loading campaigns...</span></div>';
+
         fetch(apiBaseUrl() + "/api/Campaign")
             .then(function (resp) { return resp.json(); })
             .then(function (campaigns) {
                 list.innerHTML = "";
                 window._allCampaigns = campaigns;
                 renderCampaignCards(campaigns, list);
+
+                // Auto-select the first campaign if none is selected
+                if (!selectedCampaign && campaigns.length > 0) {
+                    selectCampaign(campaigns[0]);
+                }
             })
             .catch(function (err) {
                 list.innerHTML = '<div class="text-danger small py-2 text-center">Failed to load campaigns</div>';
@@ -375,6 +383,10 @@
             handleSentimentUpdate(data.callConnectionId, data.entryTimestamp, data.sentiment);
         });
 
+        connection.on("EmotionUpdate", function (data) {
+            handleEmotionUpdate(data.callConnectionId, data.entryTimestamp, data.emotion);
+        });
+
         connection.onreconnecting(function () {
             console.warn("SignalR reconnecting...");
         });
@@ -407,6 +419,8 @@
             status: "Initiating",
             transcriptEntries: [],
             sentimentData: [],
+            operatorEmotionData: [],
+            customerEmotionData: [],
             timerInterval: null,
             timerSeconds: 0
         };
@@ -428,12 +442,32 @@
         // Render quick responses for this campaign
         renderQuickResponses(campaignTitle);
 
+        ensureLiveOperationsVisible();
         updateTabs();
+    }
+
+    function ensureLiveOperationsVisible() {
+        var detail = document.getElementById("callDetailPanel");
+        if (detail) detail.classList.add("d-none");
+
+        var hasAnyLiveCall = Object.keys(calls).length > 0;
+        var idle = document.getElementById("centerIdle");
+        var active = document.getElementById("activeCallArea");
+
+        if (hasAnyLiveCall) {
+            if (idle) idle.classList.add("d-none");
+            if (active) active.classList.remove("d-none");
+        } else {
+            if (active) active.classList.add("d-none");
+            if (idle) idle.classList.remove("d-none");
+        }
     }
 
     function updateTabs() {
         var tabContainer = document.getElementById("callTabs");
         var callIds = Object.keys(calls);
+
+        updateLiveCallsList();
 
         if (callIds.length <= 1) {
             tabContainer.classList.add("d-none");
@@ -468,9 +502,11 @@
             tab.onclick = function () { switchTab(id); };
             tabContainer.appendChild(tab);
         });
+
     }
 
     function switchTab(callConnectionId) {
+        ensureLiveOperationsVisible();
         activeTabId = callConnectionId;
         updateTabs();
         renderCallView(callConnectionId);
@@ -490,6 +526,7 @@
             var activeInfo = document.getElementById("activeCallInfo");
             if (activeInfo) activeInfo.classList.add("d-none");
             activeTabId = null;
+            updateLiveCallsList();
         } else {
             if (activeTabId === callConnectionId) {
                 activeTabId = remaining[0];
@@ -497,6 +534,42 @@
             updateTabs();
             renderCallView(activeTabId);
         }
+    }
+
+    function updateLiveCallsList() {
+        var listEl = document.getElementById("liveCallsList");
+        var emptyEl = document.getElementById("liveCallsEmpty");
+        if (!listEl || !emptyEl) return;
+
+        var callIds = Object.keys(calls);
+        if (callIds.length === 0) {
+            emptyEl.classList.remove("d-none");
+            listEl.classList.add("d-none");
+            listEl.innerHTML = "";
+            return;
+        }
+
+        emptyEl.classList.add("d-none");
+        listEl.classList.remove("d-none");
+        listEl.innerHTML = "";
+
+        callIds.forEach(function (id) {
+            var c = calls[id];
+            var item = document.createElement("div");
+            item.className = "history-item live-call-item" + (id === activeTabId ? " selected" : "");
+            item.onclick = function () { switchTab(id); };
+
+            var phone = c.phoneNumber || id.substring(0, 8);
+            var status = c.status || "";
+
+            item.innerHTML =
+                '<div class="history-phone">' + escapeHtml(phone) +
+                '  <span class="badge bg-secondary ms-2">' + escapeHtml(status) + '</span>' +
+                '</div>' +
+                '<div class="history-meta"><span>' + escapeHtml(c.campaignTitle || "") + '</span></div>';
+
+            listEl.appendChild(item);
+        });
     }
 
     // ─── Render Active Call View ─────────────────────────────
@@ -625,7 +698,8 @@
             speaker: entry.speaker,
             text: entry.text || "",
             timestamp: entry.timestamp,
-            sentiment: entry.sentiment || null
+            sentiment: entry.sentiment || null,
+            emotion: entry.emotion || null
         };
         c.transcriptEntries.push(entryData);
 
@@ -633,6 +707,15 @@
             c.sentimentData.push(sentimentToNumber(entryData.sentiment.label));
         } else {
             c.sentimentData.push(0);
+        }
+
+        // Push emotion data per speaker
+        var emotionVal = entryData.emotion ? emotionToNumber(entryData.emotion.label) : 0;
+        var isOperator = (entryData.speaker === 0 || entryData.speaker === "AI");
+        if (isOperator) {
+            c.operatorEmotionData.push(emotionVal);
+        } else {
+            c.customerEmotionData.push(emotionVal);
         }
 
         // Mic activity pulse
@@ -645,6 +728,8 @@
             area.appendChild(createChatBubble(entryData));
             area.scrollTop = area.scrollHeight;
             drawSentimentGraph(id);
+            drawEmotionGraph(id, "operatorEmotionCanvas", c.operatorEmotionData);
+            drawEmotionGraph(id, "customerEmotionCanvas", c.customerEmotionData);
         }
     }
 
@@ -685,6 +770,73 @@
         if (label === "Positive") return 1;
         if (label === "Negative") return -1;
         return 0;
+    }
+
+    // ─── Emotion Helpers ─────────────────────────────────────
+    // Maps EmotionLabel enum to a numeric value for graphing (0 to 5 scale)
+    // Neutral=0, Happy=1, Frustrated=2, Angry=3, Sad=4, Anxious=5
+    function emotionToNumber(label) {
+        var labelMap = { 0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5 };
+        var stringMap = { "Neutral": 0, "Happy": 1, "Frustrated": 2, "Angry": 3, "Sad": 4, "Anxious": 5 };
+        if (typeof label === "number") return labelMap[label] !== undefined ? labelMap[label] : 0;
+        return stringMap[label] !== undefined ? stringMap[label] : 0;
+    }
+
+    var emotionColors = {
+        0: "#9E9E9E", // Neutral - grey
+        1: "#4CAF50", // Happy - green
+        2: "#FF9800", // Frustrated - orange
+        3: "#f44336", // Angry - red
+        4: "#2196F3", // Sad - blue
+        5: "#9C27B0"  // Anxious - purple
+    };
+
+    var emotionLabels = ["Neutral", "Happy", "Frustrated", "Angry", "Sad", "Anxious"];
+
+    function getEmotionLabel(val) {
+        return emotionLabels[val] || "Neutral";
+    }
+
+    // ─── Emotion Updates ─────────────────────────────────────
+    function handleEmotionUpdate(callConnectionId, entryTimestamp, emotion) {
+        var c = calls[callConnectionId];
+        if (!c) return;
+
+        var ts = new Date(entryTimestamp).toISOString();
+        for (var i = c.transcriptEntries.length - 1; i >= 0; i--) {
+            var entryTs = new Date(c.transcriptEntries[i].timestamp).toISOString();
+            if (entryTs === ts) {
+                c.transcriptEntries[i].emotion = emotion;
+                var emotionVal = emotionToNumber(emotion.label);
+                var isOperator = (c.transcriptEntries[i].speaker === 0 || c.transcriptEntries[i].speaker === "AI");
+
+                // Update the corresponding emotion data array
+                if (isOperator) {
+                    // Find the index of this entry among operator entries
+                    var opIdx = 0;
+                    for (var k = 0; k < i; k++) {
+                        if (c.transcriptEntries[k].speaker === 0 || c.transcriptEntries[k].speaker === "AI") opIdx++;
+                    }
+                    if (opIdx < c.operatorEmotionData.length) {
+                        c.operatorEmotionData[opIdx] = emotionVal;
+                    }
+                } else {
+                    var custIdx = 0;
+                    for (var k2 = 0; k2 < i; k2++) {
+                        if (c.transcriptEntries[k2].speaker !== 0 && c.transcriptEntries[k2].speaker !== "AI") custIdx++;
+                    }
+                    if (custIdx < c.customerEmotionData.length) {
+                        c.customerEmotionData[custIdx] = emotionVal;
+                    }
+                }
+                break;
+            }
+        }
+
+        if (callConnectionId === activeTabId) {
+            drawEmotionGraph(callConnectionId, "operatorEmotionCanvas", c.operatorEmotionData);
+            drawEmotionGraph(callConnectionId, "customerEmotionCanvas", c.customerEmotionData);
+        }
     }
 
     // ─── Call Status ─────────────────────────────────────────
@@ -1070,6 +1222,81 @@
         });
     }
 
+    // ─── Emotion Graph Drawing ───────────────────────────────
+    function drawEmotionGraph(callConnectionId, canvasId, data) {
+        var canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        var ctx = canvas.getContext("2d");
+
+        var rect = canvas.parentElement.getBoundingClientRect();
+        var dpr = window.devicePixelRatio || 1;
+        canvas.width = rect.width * dpr;
+        canvas.height = 80 * dpr;
+        canvas.style.height = "80px";
+        ctx.scale(dpr, dpr);
+
+        var w = rect.width;
+        var h = 80;
+
+        ctx.clearRect(0, 0, w, h);
+
+        if (!data || data.length === 0) {
+            ctx.fillStyle = "#94a3b8";
+            ctx.font = "12px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText("No emotion data yet", w / 2, h / 2);
+            return;
+        }
+
+        var padding = { top: 8, bottom: 8, left: 4, right: 4 };
+        var plotW = w - padding.left - padding.right;
+        var plotH = h - padding.top - padding.bottom;
+        var maxEmotionVal = 5; // Anxious = 5 is the max
+
+        // Grid lines for each emotion level
+        ctx.strokeStyle = "#e2e8f0";
+        ctx.lineWidth = 0.5;
+        for (var g = 0; g <= maxEmotionVal; g++) {
+            var gy = padding.top + plotH - (g / maxEmotionVal) * plotH;
+            ctx.beginPath();
+            ctx.moveTo(padding.left, gy);
+            ctx.lineTo(w - padding.right, gy);
+            ctx.stroke();
+        }
+
+        var maxPoints = 40;
+        var visibleData = data.length > maxPoints ? data.slice(data.length - maxPoints) : data;
+        var step = visibleData.length > 1 ? plotW / (visibleData.length - 1) : plotW;
+
+        // Dots — each colored by emotion type
+        visibleData.forEach(function (v, i) {
+            var x = padding.left + i * step;
+            var y = padding.top + plotH - (v / maxEmotionVal) * plotH;
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, Math.PI * 2);
+            ctx.fillStyle = emotionColors[v] || "#9E9E9E";
+            ctx.fill();
+            ctx.strokeStyle = "#fff";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        });
+
+        // Connecting line (subtle)
+        if (visibleData.length > 1) {
+            ctx.beginPath();
+            ctx.strokeStyle = "rgba(100,100,100,0.3)";
+            ctx.lineWidth = 1;
+            ctx.lineJoin = "round";
+            visibleData.forEach(function (v, i) {
+                var x = padding.left + i * step;
+                var y = padding.top + plotH - (v / maxEmotionVal) * plotH;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════
     // RIGHT PANEL — Call History
     // ═══════════════════════════════════════════════════════════
@@ -1082,7 +1309,6 @@
         loading.classList.remove("d-none");
         empty.classList.add("d-none");
         list.classList.add("d-none");
-        document.getElementById("callDetailPanel").classList.add("d-none");
 
         fetch(apiBaseUrl() + "/api/CallHistory")
             .then(function (resp) { return resp.json(); })
@@ -1137,10 +1363,23 @@
     };
 
     function loadCallDetail(callConnectionId, element) {
-        document.querySelectorAll(".history-item").forEach(function (el) {
-            el.classList.remove("selected");
-        });
+        var historyList = document.getElementById("historyList");
+        if (historyList) {
+            historyList.querySelectorAll(".history-item").forEach(function (el) {
+                el.classList.remove("selected");
+            });
+        }
         if (element) element.classList.add("selected");
+
+        // Show loading indicator
+        var detailLoading = document.getElementById("callDetailLoading");
+        var detailPanel = document.getElementById("callDetailPanel");
+        if (detailLoading) {
+            detailLoading.classList.remove("d-none");
+            document.getElementById("centerIdle").classList.add("d-none");
+            document.getElementById("activeCallArea").classList.add("d-none");
+        }
+        if (detailPanel) detailPanel.classList.add("d-none");
 
         fetch(apiBaseUrl() + "/api/CallHistory/" + callConnectionId)
             .then(function (resp) {
@@ -1148,7 +1387,13 @@
                 return resp.json();
             })
             .then(function (record) {
+                // Hide loading indicator
+                if (detailLoading) detailLoading.classList.add("d-none");
                 var panel = document.getElementById("callDetailPanel");
+
+                // Show history detail in center panel (hide live operations until user switches back)
+                document.getElementById("centerIdle").classList.add("d-none");
+                document.getElementById("activeCallArea").classList.add("d-none");
 
                 // Show phone number with contact name if available
                 var phoneDisplay = record.phoneNumber;
@@ -1178,6 +1423,7 @@
                     recordingSection.style.display = "block";
                     if (record.recordingId) {
                         recordingPlayer.src = apiBaseUrl() + "/api/CallHistory/" + record.callConnectionId + "/recording";
+                        recordingPlayer.load();
                         recordingPlayer.style.display = "block";
                         noRecordingMsg.style.display = "none";
 
@@ -1219,34 +1465,42 @@
                     setBar("recipientTalkBar", record.talkTimeRatio.recipientPercent);
                 }
 
+                // Operator style traits
+                var traitsSection = document.getElementById("operatorTraitsSection");
+                if (traitsSection) {
+                    if (record.operatorStyleTraits) {
+                        traitsSection.style.display = "block";
+                        setBar("empathyBar", record.operatorStyleTraits.empathy * 100);
+                        setBar("energyBar", record.operatorStyleTraits.energy * 100);
+                    } else {
+                        traitsSection.style.display = "none";
+                    }
+                }
+
                 var transcriptDiv = document.getElementById("detailTranscript");
                 transcriptDiv.innerHTML = "";
 
                 if (record.transcriptEntries && record.transcriptEntries.length > 0) {
                     record.transcriptEntries.forEach(function (entry) {
-                        var div = document.createElement("div");
-                        var speakerLabel = (entry.speaker === 0 || entry.speaker === "AI") ? "AI" : "Recipient";
-                        var sentimentLabel = getSentimentLabel(entry.sentiment);
-                        var sentimentCls = getSentimentClass(sentimentLabel);
-
-                        div.className = "transcript-entry speaker-" + speakerLabel.toLowerCase();
-                        div.innerHTML =
-                            '<div class="d-flex justify-content-between align-items-center">' +
-                            '  <strong class="' + (speakerLabel === "AI" ? "text-primary" : "text-info") + '">' + speakerLabel + '</strong>' +
-                            '  <span class="sentiment-badge-large ' + sentimentCls + ' small">' + sentimentLabel + '</span>' +
-                            '</div>' +
-                            '<div>' + escapeHtml(entry.text || "") + '</div>' +
-                            '<small class="text-muted">' + new Date(entry.timestamp).toLocaleTimeString() + '</small>';
-                        transcriptDiv.appendChild(div);
+                        var bubble = createChatBubble(entry);
+                        transcriptDiv.appendChild(bubble);
                     });
                 } else {
-                    transcriptDiv.innerHTML = '<p class="text-muted small">No transcript recorded.</p>';
+                    if (record.recordingTranscript) {
+                        transcriptDiv.innerHTML = '<div class="transcript-entry"><div>' + escapeHtml(record.recordingTranscript) + '</div></div>';
+                    } else {
+                        transcriptDiv.innerHTML = '<p class="text-muted small">No transcript recorded.</p>';
+                    }
                 }
 
                 panel.classList.remove("d-none");
                 panel.scrollIntoView({ behavior: "smooth", block: "start" });
             })
             .catch(function (err) {
+                // Hide loading indicator on error
+                var detailLoading = document.getElementById("callDetailLoading");
+                if (detailLoading) detailLoading.classList.add("d-none");
+                showToast("Failed to load call details.");
                 console.error("Error loading call detail:", err);
             });
     }
@@ -1286,10 +1540,55 @@
 
     window.closeDetail = function () {
         document.getElementById("callDetailPanel").classList.add("d-none");
-        document.querySelectorAll(".history-item").forEach(function (el) {
-            el.classList.remove("selected");
-        });
+
+        var historyList = document.getElementById("historyList");
+        if (historyList) {
+            historyList.querySelectorAll(".history-item").forEach(function (el) {
+                el.classList.remove("selected");
+            });
+        }
+
+        ensureLiveOperationsVisible();
+        if (activeTabId && calls[activeTabId]) {
+            renderCallView(activeTabId);
+        }
     };
+
+    // ─── Batch Process All Calls ─────────────────────────────
+    (function () {
+        var btn = document.getElementById("batchProcessBtn");
+        if (!btn) return;
+        btn.addEventListener("click", function () {
+            btn.disabled = true;
+            var statusDiv = document.getElementById("batchProcessStatus");
+            var msgSpan = document.getElementById("batchProcessMsg");
+            if (statusDiv) statusDiv.classList.remove("d-none");
+            if (msgSpan) msgSpan.textContent = "Processing all calls... This may take a few minutes.";
+
+            fetch(apiBaseUrl() + "/api/CallHistory/batch-process", { method: "POST" })
+                .then(function (resp) {
+                    if (!resp.ok) throw new Error("Batch process failed: " + resp.status);
+                    return resp.json();
+                })
+                .then(function (result) {
+                    btn.disabled = false;
+                    if (statusDiv) statusDiv.classList.add("d-none");
+                    var msg = "Batch complete: " + result.transcribed + " transcribed, " +
+                              result.sentimentAnalyzed + " sentiment analyzed, " +
+                              result.skipped + " skipped";
+                    if (result.failed > 0) msg += ", " + result.failed + " failed";
+                    showToast(msg);
+                    // Refresh history list to reflect updated data
+                    loadCallHistory();
+                })
+                .catch(function (err) {
+                    btn.disabled = false;
+                    if (statusDiv) statusDiv.classList.add("d-none");
+                    showToast("Batch processing failed.");
+                    console.error("Batch process error:", err);
+                });
+        });
+    })();
 
     // ═══════════════════════════════════════════════════════════
     // MOBILE RESPONSIVE — Tab switching

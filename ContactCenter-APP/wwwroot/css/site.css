@@ -1088,7 +1088,7 @@ html, body {
 }
 
 .detail-meta span:not(.text-muted) {
-  color: var(--text-light);
+  color: var(--text-dark);
 }
 
 .detail-section {
@@ -1129,12 +1129,21 @@ html, body {
 
 /* ─── Detail Transcript ────────────────────────────────────── */
 .detail-transcript {
-  max-height: 250px;
+  max-height: 400px;
   overflow-y: auto;
-  padding: 0.4rem;
-  background-color: rgba(255,255,255,0.04);
+  padding: 0.5rem;
+  background-color: var(--center-bg);
+  border: 1px solid var(--border-dark);
   border-radius: var(--radius-sm);
   font-size: 0.8rem;
+}
+
+.detail-transcript .chat-bubble {
+  margin-bottom: 0.35rem;
+}
+
+.detail-transcript .chat-bubble .bubble-content {
+  font-size: 0.78rem;
 }
 
 .detail-transcript .transcript-entry {

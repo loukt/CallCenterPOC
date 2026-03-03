@@ -1,11 +1,11 @@
 # AI CallCenter - Virtual Agent
 
 ## Introduction
-This project is a proof-of-concept project written in C# that demonstrates the implementation of a call center application. This project is divided into two main parts: CallCenterCoreAPI and CallCenterPOC-App.
+This project is a proof-of-concept project written in C# that demonstrates the implementation of a call center application. This project is divided into two main parts: ContactCenter-API and ContactCenter-APP.
 
 ## Repository Structure
-- **CallCenterCoreAPI**: This folder contains the core API for the call center application.
-  - `CallCenterCoreAPI.csproj`: Project file for the API.
+- **ContactCenter-API**: This folder contains the core API for the call center application.
+   - `ContactCenter-API.csproj`: Project file for the API.
   - `Controllers`: Contains the controllers for handling API requests.
   - `Models`: Contains the data models used in the application.
   - `Program.cs`: The main entry point for the API.
@@ -14,8 +14,8 @@ This project is a proof-of-concept project written in C# that demonstrates the i
   - `appsettings.json`: Configuration file for the API.
   - `wwwroot`: Contains static files for the API.
 
-- **CallCenterPOC-App**: This folder contains the application part of the project.
-  - `CallCenterPOC-App.csproj`: Project file for the application.
+- **ContactCenter-APP**: This folder contains the application part of the project.
+   - `ContactCenter-APP.csproj`: Project file for the application.
   - `Pages`: Contains the Razor pages for the application.
   - `Program.cs`: The main entry point for the application.
   - `Properties`: Contains project properties.
@@ -33,7 +33,7 @@ To install and run this project locally, follow these steps:
    ```
 
 2. **Build the projects:**
-   Open the solution in your preferred IDE (e.g., Visual Studio) and build both `CallCenterCoreAPI` and `CallCenterPOC-App`.
+   Open the solution in your preferred IDE (e.g., Visual Studio) and build both `ContactCenter-API` and `ContactCenter-APP`.
 
 3. **Run the projects:**
    Execute both the API and the application using your IDE or command line.

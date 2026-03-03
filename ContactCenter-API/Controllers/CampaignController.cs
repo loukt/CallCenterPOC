@@ -63,5 +63,12 @@ namespace ContactCenterPOC.Controllers
                 });
             }
         }
+        [HttpPost("reset")]
+        public async Task<IActionResult> ResetCampaigns()
+        {
+            await _campaignService.ResetToDefaultsAsync();
+            var campaigns = await _campaignService.GetAllAsync();
+            return Ok(new { message = "Campaigns reset to defaults", count = campaigns.Count });
+        }
     }
 }

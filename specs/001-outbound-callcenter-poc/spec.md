@@ -2,8 +2,8 @@
 
 **Feature Branch**: `001-outbound-callcenter-poc`  
 **Created**: 2026-02-20  
-**Updated**: 2026-02-25  
-**Status**: Draft  
+**Updated**: 2026-02-27  
+**Status**: Implemented (POC)  
 **Input**: User description: "A simple solution to simulate an outbound call center using Microsoft Azure services. An operator uses a web interface to place an outbound phone call to a real phone number. Once the call is connected, an AI-powered virtual agent conducts the conversation in real time using voice, following a user-defined script/prompt."
 
 ## Clarifications
@@ -26,6 +26,13 @@
 - Q: Should the UX be redesigned as a professional call operations center? → A: Yes. Three-panel layout: left panel for phone numbers + campaigns (with "New Campaign" button), center panel for live transcript + live sentiment graph, right panel for call history. Single-page dashboard with full-viewport height and independently scrollable panels. Call history moves from a separate page into the right panel.
 - Q: Should the default campaigns be expanded with realistic outbound scenarios? → A: Yes. Replace the 4 generic defaults with 6 outbound-focused campaigns: Bank Loan Collection, New Product Marketing, Customer Satisfaction Survey, Appointment Reminder, Insurance Policy Renewal, and Subscription Renewal & Upsell. Each should have detailed, production-quality AI behavior instructions.
 - Q: Should the dashboard UX be redesigned with a more professional, enterprise-grade look? → A: Yes. Redesign inspired by professional banking/financial services dashboards — deep navy theme, branded header, rich campaign cards with colored category badges, professional call controls (End Call, Mute, Hold), call timer, quick response suggestions, and KPI summary cards.
+
+### Session 2026-02-27
+
+- Q: How should operators navigate between live calls and history? → A: The right pane has **two tabs**: **Live calls** and **Historical calls**.
+- Q: Where should historical call details (recording + transcript) render? → A: In the **center panel** (the main work area). Clicking a historical item switches the center into a "historical detail" view.
+- Q: What happens when the operator starts a new call or switches to a live call? → A: The center panel switches back to **live operations** (active call workspace or idle live state).
+- Q: For privacy, how should phone numbers appear in call history? → A: Phone numbers shown in **Historical calls** list and detail views should be **partially masked**, keeping only the last 4 digits visible.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -51,7 +58,7 @@ An operator opens the web application, enters one or two destination phone numbe
 
 ### User Story 2 - Campaign Management (Priority: P2)
 
-The operator can select from pre-defined campaigns or create custom campaigns. A campaign defines: a title, a description (what the campaign is about), and AI behavior instructions (the system prompt for the AI agent). The system ships with 4 pre-defined campaigns. The operator can also create new campaigns via a simple form, and custom campaigns persist across sessions. Selecting a campaign sets the AI prompt for the call.
+The operator can select from pre-defined campaigns or create custom campaigns. A campaign defines: a title, a description (what the campaign is about), and AI behavior instructions (the system prompt for the AI agent). The system ships with 6 pre-defined outbound-focused campaigns. The operator can also create new campaigns via a simple form, and custom campaigns persist across sessions. Selecting a campaign sets the AI prompt for the call.
 
 **Why this priority**: Campaigns replace the ad-hoc prompt scenarios from the initial POC with a structured, reusable, and persistent concept that better represents real call center operations. This makes the POC immediately demonstrable and extensible.
 
@@ -90,7 +97,7 @@ Once the call is connected, the system streams audio bidirectionally in real tim
 
 1. **Given** a call is connected, **When** the recipient speaks, **Then** their audio is streamed to the AI and the AI generates a contextual voice response within a natural conversational pause.
 2. **Given** the AI is speaking, **When** the recipient interrupts (barge-in), **Then** the AI stops its current audio output and begins processing the new input.
-3. **Given** the call is connected, **When** neither party speaks for an extended silence, **Then** the system maintains the connection without crashing or disconnecting prematurely.
+3. **Given** the call is connected, **When** neither party speaks for an extended silence (e.g., 30+ seconds), **Then** the system maintains the connection without crashing or disconnecting prematurely.
 
 ---
 
@@ -146,7 +153,7 @@ The operator can enter up to 2 phone numbers in a single call initiation. The sy
 
 ### User Story 7 - Call History & Analytics Review (Priority: P2)
 
-The operator can navigate to a "Call History" page that displays a list of all previous calls. Each call entry shows: the phone number(s) called, the campaign used, call duration, overall sentiment score, and timestamp. Clicking a call entry expands it to show: the full transcript with per-segment sentiment badges, a speaker timeline visualization (showing who spoke when and for how long), and aggregate analytics (e.g., overall sentiment breakdown, talk-time ratio AI vs. recipient).
+The operator can review historical calls from the dashboard's **Historical calls** tab (right pane). The list displays previous calls with key metadata (phone number(s), campaign, duration, sentiment, timestamp). Clicking a call switches the **center panel** into a historical detail view showing: recording playback (when available), transcript (live transcript and/or on-demand recording transcript), per-segment sentiment badges, and aggregate analytics (e.g., sentiment breakdown, talk-time ratio).
 
 **Why this priority**: Post-call review and analytics close the loop on the call center workflow, enabling quality assurance, campaign effectiveness assessment, and AI behavior tuning.
 
@@ -154,11 +161,12 @@ The operator can navigate to a "Call History" page that displays a list of all p
 
 **Acceptance Scenarios**:
 
-1. **Given** one or more calls have been completed, **When** the operator views the call history (right panel of the dashboard, or dedicated page if US8 is not yet implemented), **Then** they see a list of all previous calls with: phone number(s), campaign name, duration, overall sentiment, and timestamp.
-2. **Given** the operator clicks on a call entry in the history, **When** the detail view expands, **Then** they see the full transcript with per-entry sentiment badges (green/gray/red) and speaker labels (AI/Recipient).
+1. **Given** one or more calls have been completed, **When** the operator views the Historical calls tab, **Then** they see a list of all previous calls with: phone number(s), campaign name, duration, overall sentiment, and timestamp.
+2. **Given** the operator clicks on a historical call, **When** the center panel switches to the historical detail view, **Then** they see recording playback (if available) and a transcript view (including persisted recording transcript if present).
 3. **Given** the operator views a call detail, **When** they look at the analytics section, **Then** they see: (a) overall sentiment breakdown (% positive/neutral/negative), (b) talk-time ratio (AI vs. recipient), (c) speaker timeline showing who spoke when during the call.
 4. **Given** the operator has refreshed the page or restarted the application, **When** they view call history, **Then** all previous calls are still listed (data is persisted to storage, not just in-memory).
 5. **Given** there are many calls in the history, **When** the operator views the list, **Then** calls are sorted by most recent first and the list is scrollable.
+6. **Given** the operator views historical call summaries or details, **When** phone number(s) are displayed, **Then** the system masks the phone numbers (e.g., show only the last 4 digits).
 
 ---
 
@@ -183,9 +191,12 @@ The web application is redesigned as a professional, enterprise-grade call opera
 
 **Right Panel — "CALL ANALYTICS & HISTORY"** (~22% width):
 
-- **Active Call Details** (top section, visible when a call is active): A contact information card showing the phone number, campaign name and category badge, call duration (updating live), and a truncated summary of the AI behavior instructions for the active campaign.
-- **KPI Dashboard** (top section, visible when idle): Quick stats — calls completed today, average sentiment score, average duration, last call timestamp.
-- **Call History List** (scrollable, always visible): Compact call record cards sorted by most recent first. Each card shows: phone number(s), campaign badge (colored), duration, overall sentiment indicator (colored dot), and timestamp. Clicking a card expands it inline to reveal: full transcript with per-entry sentiment badges, sentiment breakdown bars (% positive/neutral/negative), talk-time ratio bar (AI vs. Recipient), and speaker timeline.
+- **Tabs**: The right panel has two tabs:
+  - **Live calls**: Shows the currently active/in-progress calls as a list. Selecting a live call brings the center panel back to live operations and focuses that call.
+  - **Historical calls**: Shows completed calls (scrollable list) sorted by most recent first.
+- **Selection behavior**:
+  - Clicking a historical call switches the **center panel** into a historical detail view (recording playback + transcript + analytics).
+  - Starting a new call or selecting a live call switches the center back to live operations.
 
 **Visual Design System**:
 - **Header**: Deep navy (#1a1a2e) or dark slate (#0f172a) background, white text, subtle gradient or border accent
@@ -212,9 +223,9 @@ The web application is redesigned as a professional, enterprise-grade call opera
 7. **Given** a call is in progress and transcript entries arrive, **When** the operator views the live transcript, **Then** entries render as chat bubbles — AI messages on the left with a bot icon and light blue background, recipient messages on the right with a person icon — each with a timestamp and color-coded sentiment dot.
 8. **Given** the operator clicks the Mute button, **When** the button is toggled, **Then** the button changes to a "mic-off" icon style and the microphone level indicator goes silent. Clicking again restores the original state.
 9. **Given** a call is active, **When** the operator views the Quick Responses panel, **Then** they see pre-built response suggestions specific to the active campaign (e.g., for Bank Loan Collection: "We can set up a flexible payment plan").
-10. **Given** a call is in progress, **When** the operator views the right panel, **Then** the top section shows a contact info card with the phone number, campaign name/badge, and live duration, while the bottom section still shows the call history list.
+10. **Given** a call is in progress, **When** the operator views the right panel, **Then** the Live calls tab lists active calls, and the Historical calls tab lists completed calls.
 11. **Given** two calls are active simultaneously, **When** the operator views the center panel, **Then** they see tabs at the top (one per call with phone number and campaign badge) and can switch between call workspaces instantly.
-12. **Given** the operator clicks a call entry in the right panel history, **When** the detail expands, **Then** they see the full transcript with sentiment badges, sentiment breakdown bars, talk-time ratio bar, and speaker timeline.
+12. **Given** the operator clicks a call entry in the Historical calls tab, **When** the center panel switches to historical detail, **Then** they see the full transcript with sentiment badges, sentiment breakdown bars, talk-time ratio bar, and speaker timeline.
 13. **Given** the application is on a narrow screen (<992px), **When** the viewport is too small for three panels, **Then** the layout switches to tab-based navigation with "Campaigns," "Live Call," and "History" tabs.
 
 ---
@@ -272,8 +283,9 @@ The web application is redesigned as a professional, enterprise-grade call opera
 - **FR-032**: The center panel MUST display professional call controls during an active call: End Call button (red, phone-down icon), Mute toggle button (microphone icon), and Hold toggle button (pause icon), along with a visual microphone level indicator.
 - **FR-033**: The center panel MUST display a live call timer (MM:SS format, counting up from 00:00) when a call is connected, along with the target phone number and campaign name badge in the status bar.
 - **FR-034**: The center panel MUST display a collapsible "Quick Responses" panel during active calls, showing pre-built response suggestions relevant to the active campaign that the operator can reference or inject into the conversation.
-- **FR-035**: The center panel idle state MUST display KPI summary cards (Calls Today, Average Duration, Overall Sentiment) and a professional welcome message with the application logo.
+- **FR-035**: The center panel idle state MUST display KPI summary cards (Calls Today, Average Duration, Overall Sentiment, Success Rate) and a professional welcome message with the application logo.
 - **FR-036**: The live transcript MUST render in a chat-bubble style with distinct visual styling for AI messages vs. recipient messages, including speaker icons, timestamps, and color-coded sentiment dots (green=positive, gray=neutral, red=negative).
+- **FR-037**: The Historical calls list and historical call detail views MUST mask displayed phone numbers for privacy, keeping only the last 4 digits visible.
 
 ### Key Entities
 
@@ -306,7 +318,7 @@ The web application is redesigned as a professional, enterprise-grade call opera
 - **SC-015**: The branded header, campaign cards with colored badges, and professional call controls are visually consistent with the deep navy/slate design system across all viewport sizes.
 - **SC-016**: Call control buttons (End Call, Mute, Hold) respond within 500ms of operator click and provide clear visual feedback of their toggle state.
 - **SC-017**: The live transcript renders in chat-bubble style with distinct AI vs. recipient styling, and each entry displays a sentiment dot within 1 second of the transcript being received.
-- **SC-018**: KPI summary cards (Calls Today, Average Duration, Overall Sentiment) update in real time as calls complete.
+- **SC-018**: KPI summary cards (Calls Today, Average Duration, Overall Sentiment, Success Rate) update in real time as calls complete.
 
 ## Assumptions
 
@@ -367,7 +379,7 @@ The web application is redesigned as a professional, enterprise-grade call opera
 
 ### Additional Functional Requirements
 
-- **FR-037**: The system MUST persist the recording content location URL in the `CallRecord` when a call recording is available, so recordings can be retrieved for playback.
+- **FR-051**: The system MUST persist the recording content location URL in the `CallRecord` when a call recording is available, so recordings can be retrieved for playback.
 - **FR-038**: The system MUST provide an API endpoint to download/stream a call recording by call connection ID, proxying the recording content from ACS/Blob Storage.
 - **FR-039**: The call detail view in the right panel MUST display an HTML5 `<audio>` player when a recording is available for the selected historical call.
 - **FR-040**: The call initiation form MUST support an optional contact name field alongside each phone number input.
@@ -386,6 +398,22 @@ The web application is redesigned as a professional, enterprise-grade call opera
 - **SC-022**: Call history records persist across API restarts — after redeploying the API, previously completed calls appear in the history list on page load.
 - **SC-023**: When clicking on a history item with a recording, the audio player loads and plays the recording MP3 file from Blob Storage.
 - **SC-024**: When selecting a campaign, the prompt preview area shows the campaign's AI behavior instructions. The prompt override textarea is cleared. The AI uses the campaign's instructions unless the operator explicitly types a custom prompt.
+
+---
+
+## Phase 17 Additions
+
+### Updates to Existing Features
+
+**Blob Container Name Derivation (FR-043 supplement)**:
+- When deriving `BlobStorage:AccountUri` from the `BlobContainer` URL, the system MUST also extract the container name from the URL path and set `BlobStorage:ContainerName` so that `CallHistoryService` and `CampaignService` use the correct container.
+
+### Additional Functional Requirements
+
+- **FR-047**: The `SentimentAnalysisService` MUST authenticate to Azure OpenAI using `DefaultAzureCredential` (Managed Identity / Entra ID) for Azure deployments, with optional API key support for local development when `AzureOpenAI:Key` is configured. The API app's managed identity MUST be assigned the "Cognitive Services OpenAI User" role on the Azure OpenAI resource.
+- **FR-048**: The real-time sentiment analysis MUST use a rolling context window of the last **5 seconds** of transcript entries (aggregated text) rather than analyzing only the current message text, to provide richer conversational context while staying responsive.
+
+> **FR Numbering Note**: FR-049 and FR-050 are defined in Phase 18 Additions below. FR-051 is defined in Phase 15 Additions above (recording content URL persistence). FR-052 through FR-055 are reserved for future use.
 
 ---
 
@@ -414,3 +442,41 @@ The web application is redesigned as a professional, enterprise-grade call opera
 ### Additional Success Criteria
 
 - **SC-025**: For a call with an existing MP3/WAV recording, on-demand transcription completes and the transcript becomes visible in the call detail panel within 60 seconds for typical POC-length calls.
+
+---
+
+## Phase 22 Additions
+
+### User Story 12: Dual-Speaker Emotion Timelines + Operator Style Traits (Priority: P2)
+
+**As an** operator,
+**I want to** see two emotion graphs during a call (one for the operator side and one for the customer side),
+**so that** I can quickly understand emotional dynamics per speaker throughout the conversation.
+
+**Definitions / Clarifications**:
+- **Operator side** = the AI agent speaking on the call (this POC does not stream human-operator audio).
+- **Customer side** = the call recipient.
+- An **emotion** is a multi-class classification (not just positive/neutral/negative sentiment). Emotions are attached to transcript segments and can be visualized over time.
+
+#### Acceptance Scenarios
+
+| # | Given | When | Then |
+|---|-------|------|------|
+| 1 | A call is in progress and transcript entries are arriving | The system analyzes emotions per transcript entry | Each entry is labeled with an emotion (label + confidence) for its speaker side (operator vs customer) |
+| 2 | A call is in progress with both AI and customer transcript entries | The operator views the center panel graphs | Two separate emotion graphs are visible: one for operator (AI) and one for customer (recipient), each updating as new entries arrive |
+| 3 | A call completes and appears in history | The operator opens the historical detail view | Both speaker emotion timelines are visible as part of the historical call review |
+| 4 | A call completes and is persisted | The system computes operator style traits from the operator-side (AI) transcript | The historical call record includes operator style trait scores (e.g., empathetic, energetic) |
+| 5 | Emotion analysis fails for a segment (model error/timeout) | The operator views the transcript and graphs | The call continues normally; missing emotion values default to Neutral with confidence 0 and the failure is logged |
+
+### Additional Functional Requirements
+
+- **FR-056**: The system MUST detect an emotional state for each transcript segment and attach it to the segment as `{ label, confidence }`.
+- **FR-057**: The dashboard center panel MUST display **two** emotion graphs for live calls: one for operator-side (AI) emotion and one for customer-side (recipient) emotion.
+- **FR-058**: The system MUST persist per-segment emotion data into call history so both speaker emotion timelines can be reviewed after the call ends.
+- **FR-059**: The system MUST compute operator style traits (at minimum: `Empathy`, `Energy`) from the operator-side transcript and persist them into the historical call record.
+
+### Additional Success Criteria
+
+- **SC-026**: During a live call, both emotion graphs update within 1 second after a new transcript segment is received.
+- **SC-027**: For a completed call, historical detail renders both speaker emotion timelines and operator style traits within 3 seconds of selection.
+- **SC-028**: When emotion analysis is unavailable, the system continues to stream transcripts and sentiment, and emotion defaults to Neutral with confidence 0 without UI breakage.

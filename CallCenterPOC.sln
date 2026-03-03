@@ -8,9 +8,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		.editorconfig = .editorconfig
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CallCenterPOC-App", "CallCenterPOC-App\CallCenterPOC-App.csproj", "{2E21615E-2741-46A0-BBE3-E0407906627C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ContactCenter-APP", "ContactCenter-APP\ContactCenter-APP.csproj", "{2E21615E-2741-46A0-BBE3-E0407906627C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ContactCenterPOC-API", "ContactCenterPOC-API\ContactCenterPOC-API.csproj", "{F23520BB-B68E-4BAE-9C38-5DA2017EADEE}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ContactCenter-API", "ContactCenter-API\ContactCenter-API.csproj", "{F23520BB-B68E-4BAE-9C38-5DA2017EADEE}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CallCenterPOC-API.Tests", "CallCenterPOC-API.Tests\CallCenterPOC-API.Tests.csproj", "{C1CDFE85-8F3D-4367-A2A6-94AC8E97A09A}"
 EndProject

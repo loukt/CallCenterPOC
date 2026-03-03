@@ -14,6 +14,7 @@ Submitted by the operator to initiate one or two simultaneous calls.
 | Field | Type | Validation | Description |
 |-------|------|------------|-------------|
 | PhoneNumbers | string[] | Required. 1–2 items. Each E.164 format: `^\+[1-9]\d{1,14}$` | Target phone number(s) to call simultaneously |
+| ContactNames | string[]? | Optional (parallel to PhoneNumbers, 1:1 index correspondence) | Contact names for personalized AI greetings (Phase 15) |
 | CampaignId | string? | Optional (if null, uses Prompt; if both null, uses default system prompt) | ID of the selected campaign |
 | Prompt | string? | Optional (overrides campaign instructions if provided) | Custom AI agent instructions for this call |
 
@@ -48,7 +49,7 @@ Tracks a single outbound call while it is active. Not persisted to a database �
 
 ### 3. Campaign (Persistent Configuration)
 
-Reusable call configuration defining the AI agent's behavior. Stored as a JSON file in Azure Blob Storage (or local file for development). 4 pre-defined campaigns ship by default; operator can create additional campaigns at runtime.
+Reusable call configuration defining the AI agent's behavior. Stored as a JSON file in Azure Blob Storage (or local file for development). 6 pre-defined outbound-focused campaigns ship by default; operator can create additional campaigns at runtime.
 
 | Field | Type | Validation | Description |
 |-------|------|------------|-------------|
@@ -56,7 +57,7 @@ Reusable call configuration defining the AI agent's behavior. Stored as a JSON f
 | Title | string | Required. Unique across all campaigns | Display name (e.g., "Loan Collections") |
 | Description | string | Required | What the campaign is about (shown in UI) |
 | AiBehaviorInstructions | string | Required | System prompt for the AI agent |
-| IsDefault | bool | — | True for the 4 pre-defined campaigns (cannot be deleted) |
+| IsDefault | bool | — | True for the 6 pre-defined campaigns (cannot be deleted) |
 | CreatedAt | DateTimeOffset | — | UTC timestamp when campaign was created |
 
 **Note**: Replaces the original `PromptScenario` entity. Campaigns are persisted to Blob Storage as a single JSON file (`campaigns.json`) and cached in memory on load. Changes write-through to Blob Storage.
@@ -71,6 +72,7 @@ A single line of transcript streamed to the operator in real time. Also accumula
 | Speaker | SpeakerType (enum) | AI or Recipient |
 | Text | string | Transcribed speech content |
 | Sentiment | SentimentResult | Sentiment analysis of this segment |
+| Emotion | EmotionResult? | Emotion analysis of this segment (multi-class). Optional for backward compatibility; defaults to Neutral with confidence 0 when unavailable. |
 | Timestamp | DateTimeOffset | When the utterance was captured |
 
 #### SpeakerType Enum
@@ -108,6 +110,26 @@ Status change notification sent to the operator's browser.
 | Message | string? | Human-readable detail (e.g., "Call ended: 5-minute limit reached") |
 | Timestamp | DateTimeOffset | When the status changed |
 
+### 6a. SentimentUpdate (Streamed via SignalR)
+
+Asynchronous sentiment result sent after a transcript entry has been delivered. Allows the frontend to update an already-rendered transcript entry with its sentiment badge without blocking transcript delivery on sentiment analysis.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| CallConnectionId | string | Which call this sentiment belongs to |
+| EntryTimestamp | DateTimeOffset | Timestamp of the transcript entry being updated (used to match the entry) |
+| Sentiment | SentimentResult | The computed sentiment result |
+
+### 6b. EmotionUpdate (Streamed via SignalR)
+
+Asynchronous emotion result sent after a transcript entry has been delivered. Similar to `SentimentUpdate` but carries multi-class emotion data for the per-speaker emotion graphs (Phase 22).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| CallConnectionId | string | Which call this emotion belongs to |
+| EntryTimestamp | DateTimeOffset | Timestamp of the transcript entry being updated |
+| Emotion | EmotionResult | The computed emotion result (label + confidence) |
+
 ### 7. CallRecord (Persisted to Blob Storage)
 
 A completed call record persisted to Azure Blob Storage as a JSON file for call history review. Created when a call disconnects by serializing relevant data from the `ActiveCall`.
@@ -124,8 +146,48 @@ A completed call record persisted to Azure Blob Storage as a JSON file for call 
 | SentimentBreakdown | SentimentBreakdown | Percentage breakdown of positive/neutral/negative |
 | TalkTimeRatio | TalkTimeRatio | Talk time split between AI and Recipient |
 | TranscriptEntries | List\<TranscriptEntry\> | Full transcript with per-segment sentiment |
+| OperatorStyleTraits | OperatorStyleTraits? | Derived style trait scores for the operator side (AI), e.g., empathy/energy (Phase 22) |
+| RecordingId | string? | ACS recording identifier for playback (Phase 15) |
+| ContactName | string? | Optional contact name for personalized AI greetings (Phase 15) |
+| HasRecording | bool | Whether a recording is available for this call (Phase 16, derived from RecordingId) |
+| RecordingTranscript | string? | On-demand transcription of the call recording (Phase 18) |
+| RecordingTranscribedAt | DateTimeOffset? | UTC timestamp when the recording was transcribed (Phase 18) |
 | StartedAt | DateTimeOffset | When the call was initiated |
 | EndedAt | DateTimeOffset | When the call disconnected |
+
+---
+
+## Phase 22 Additions: Emotion + Operator Traits
+
+### EmotionResult (Value Object)
+
+Emotion analysis result for a single transcript segment. Computed in real time similarly to sentiment, but with a multi-class label set.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| Label | EmotionLabel (enum) | Emotion classification |
+| Confidence | float | Confidence score (0.0–1.0) |
+
+#### EmotionLabel Enum (Initial Set)
+
+| Value | Description |
+|-------|-------------|
+| Neutral | No strong emotion detected / informational |
+| Happy | Positive, upbeat affect |
+| Frustrated | Impatient, annoyed, dissatisfied tone |
+| Angry | Hostile, confrontational tone |
+| Sad | Downbeat, disappointed tone |
+| Anxious | Worried, uncertain tone |
+
+### OperatorStyleTraits (Value Object)
+
+Summary traits computed from **operator-side** (AI) transcript over the whole call.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| Empathy | float | 0.0–1.0 score for empathetic language/tone |
+| Energy | float | 0.0–1.0 score for energetic/engaged language/tone |
+| ComputedAt | DateTimeOffset | UTC timestamp when the traits were computed |
 
 #### SentimentBreakdown (Value Object)
 

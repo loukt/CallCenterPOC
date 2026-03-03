@@ -363,3 +363,29 @@ MigrationBackup/
 FodyWeavers.xsd
 /ContactCenterPOC-API/myappsettings.json
 /CallCenterPOC-App/myappsettings.json
+
+# Debug and diagnostic artifacts (root-level)
+/aoai-*.txt
+/aoai-*.json
+/az-*.txt
+/az-*.json
+/api-*.txt
+/api-*.json
+/callhistory-*.txt
+/callhistory-*.json
+/deploy-*.txt
+/pe-*.json
+/pe-*.txt
+/update-*.json
+/zg-*.txt
+/zonegroup-*.txt
+/zonegroup-*.json
+
+# Downloaded log bundles
+api-logs/
+api-logs-unzipped/
+api-logs-download.zip
+
+# Deployment scripts (local tooling)
+scripts/
+*.zip

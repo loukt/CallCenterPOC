@@ -17,8 +17,8 @@ Auto-generated from all feature plans. Last updated: 2026-02-20
 ## Project Structure
 
 ```text
-CallCenterPOC-App/
-ContactCenterPOC-API/
+ContactCenter-APP/
+ContactCenter-API/
 specs/
 ```
 
@@ -29,10 +29,10 @@ specs/
 dotnet build .\CallCenterPOC.sln
 
 # Run API
-dotnet run --project .\ContactCenterPOC-API
+dotnet run --project .\ContactCenter-API
 
 # Run UI
-dotnet run --project .\CallCenterPOC-App
+dotnet run --project .\ContactCenter-APP
 ```
 
 ## Code Style

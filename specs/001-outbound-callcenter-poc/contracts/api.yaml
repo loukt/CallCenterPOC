@@ -7,7 +7,7 @@ info:
     and bridges audio to Azure OpenAI Realtime API for AI-driven conversations.
     Supports campaign management, real-time sentiment analysis, multi-number calling,
     and call history with analytics.
-  version: 2.0.0
+  version: 3.0.0
 
 servers:
   - url: https://{host}
@@ -218,6 +218,74 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/CallHistory/{callConnectionId}/recording:
+    get:
+      operationId: getCallRecording
+      summary: Download call recording audio
+      description: >
+        Streams the MP3 recording for a completed call from Azure Blob Storage.
+        Returns the audio file with Content-Type audio/mpeg and supports HTTP
+        range requests for seeking in the browser audio player.
+      tags: [CallHistory]
+      parameters:
+        - name: callConnectionId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The ACS call connection ID
+      responses:
+        '200':
+          description: Recording audio stream
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: No recording found for this call
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/CallHistory/{callConnectionId}/transcribe:
+    post:
+      operationId: transcribeCallRecording
+      summary: Transcribe a call recording
+      description: >
+        Downloads the recording audio from Blob Storage, sends it to Azure
+        OpenAI for transcription, and persists the transcript text into the
+        call history record. Returns the updated CallRecord with the transcript.
+      tags: [CallHistory]
+      parameters:
+        - name: callConnectionId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The ACS call connection ID
+        - name: force
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: If true, re-transcribe even if a transcript already exists
+      responses:
+        '200':
+          description: Transcription completed, updated call record returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallRecord'
+        '404':
+          description: No call record or recording found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/Callback:
     post:
       operationId: callbackEvent
@@ -327,6 +395,15 @@ components:
           nullable: true
           description: Custom AI agent instructions. Overrides campaign instructions if provided.
           example: "You are a friendly customer service representative."
+        contactNames:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: >
+            Optional contact names parallel to phoneNumbers (1:1 index correspondence).
+            When provided, the AI agent greets each contact by name.
+          example: ["John Doe"]
 
     CallInitiatedResponse:
       type: object
@@ -399,6 +476,11 @@ components:
           type: string
         sentiment:
           $ref: '#/components/schemas/SentimentResult'
+        emotion:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/EmotionResult'
+          description: Per-segment emotion (Phase 22). Null for pre-Phase-22 entries.
         timestamp:
           type: string
           format: date-time
@@ -475,6 +557,10 @@ components:
           type: string
         phoneNumber:
           type: string
+        contactName:
+          type: string
+          nullable: true
+          description: Optional contact name (Phase 15)
         campaignTitle:
           type: string
           nullable: true
@@ -484,6 +570,9 @@ components:
         overallSentiment:
           type: string
           enum: [Positive, Neutral, Negative]
+        hasRecording:
+          type: boolean
+          description: True if a recording exists for this call (Phase 16)
         startedAt:
           type: string
           format: date-time
@@ -496,6 +585,10 @@ components:
           type: string
         phoneNumber:
           type: string
+        contactName:
+          type: string
+          nullable: true
+          description: Optional contact name (Phase 15)
         campaignId:
           type: string
           nullable: true
@@ -510,6 +603,22 @@ components:
         overallSentiment:
           type: string
           enum: [Positive, Neutral, Negative]
+        recordingId:
+          type: string
+          nullable: true
+          description: ACS recording ID (Phase 15)
+        hasRecording:
+          type: boolean
+          description: True if a recording blob exists (Phase 16)
+        recordingTranscript:
+          type: string
+          nullable: true
+          description: Transcribed text from the recording (Phase 18)
+        recordingTranscribedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the recording was transcribed (Phase 18)
         sentimentBreakdown:
           type: object
           properties:
@@ -531,6 +640,11 @@ components:
             recipientPercent:
               type: number
               format: float
+        operatorStyleTraits:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/OperatorStyleTraits'
+          description: Operator style traits (Phase 22). Null for pre-Phase-22 call records.
         transcriptEntries:
           type: array
           items:
@@ -541,3 +655,60 @@ components:
         endedAt:
           type: string
           format: date-time
+
+    EmotionResult:
+      type: object
+      description: Per-segment emotion classification (Phase 22)
+      properties:
+        label:
+          $ref: '#/components/schemas/EmotionLabel'
+        confidence:
+          type: number
+          format: float
+          description: Confidence score (0.0–1.0)
+
+    EmotionLabel:
+      type: string
+      enum: [Neutral, Happy, Frustrated, Angry, Sad, Anxious]
+      description: Emotion classification labels (Phase 22)
+
+    OperatorStyleTraits:
+      type: object
+      description: Operator style traits computed at end-of-call from operator-side transcript (Phase 22)
+      properties:
+        empathy:
+          type: number
+          format: float
+          description: Empathy score (0.0–1.0)
+        energy:
+          type: number
+          format: float
+          description: Energy score (0.0–1.0)
+        computedAt:
+          type: string
+          format: date-time
+          description: UTC timestamp when the traits were computed
+
+    SentimentUpdate:
+      type: object
+      description: SignalR server-to-client event for asynchronous sentiment updates
+      properties:
+        callConnectionId:
+          type: string
+        entryTimestamp:
+          type: string
+          format: date-time
+        sentiment:
+          $ref: '#/components/schemas/SentimentResult'
+
+    EmotionUpdate:
+      type: object
+      description: SignalR server-to-client event for asynchronous emotion updates (Phase 22)
+      properties:
+        callConnectionId:
+          type: string
+        entryTimestamp:
+          type: string
+          format: date-time
+        emotion:
+          $ref: '#/components/schemas/EmotionResult'

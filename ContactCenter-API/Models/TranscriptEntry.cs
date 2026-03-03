@@ -12,6 +12,7 @@ namespace ContactCenterPOC.Models
         public SpeakerType Speaker { get; set; }
         public string Text { get; set; } = string.Empty;
         public SentimentResult Sentiment { get; set; } = new SentimentResult();
+        public EmotionResult? Emotion { get; set; }
         public DateTimeOffset Timestamp { get; set; } = DateTimeOffset.UtcNow;
     }
 }

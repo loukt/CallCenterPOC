@@ -7,7 +7,7 @@
 			"type": "process",
 			"args": [
 				"clean",
-				"${workspaceFolder}/CallCenterCoreAPI",
+				"${workspaceFolder}/ContactCenter-API/ContactCenter-API.csproj",
 				"/property:GenerateFullPaths=true",
 				"/consoleloggerparameters:NoSummary"
 			],
@@ -19,7 +19,7 @@
 			"type": "process",
 			"args": [
 				"publish",
-				"${workspaceFolder}/CallCenterCoreAPI",
+				"${workspaceFolder}/ContactCenter-API/ContactCenter-API.csproj",
 				"--configuration",
 				"Release",
 				"/property:GenerateFullPaths=true",

@@ -1,4 +1,4 @@
-# Quickstart: Outbound Call Center POC
+﻿# Quickstart: Outbound Call Center POC
 
 **Feature**: `001-outbound-callcenter-poc`  
 **Date**: 2026-02-25
@@ -16,7 +16,7 @@
 
 ## Configuration
 
-### ContactCenterPOC-API (Backend)
+### ContactCenter-API (Backend)
 
 Set the following in **User Secrets** (do NOT put secrets in `appsettings.json`):
 
@@ -40,13 +40,14 @@ Set the following in `appsettings.json` (non-secret):
 | `AzureOpenAI:TranscriptionApiVersion` | API version override for transcription endpoint (optional) | `2024-10-21` |
 | `AzureOpenAI:TranscriptionLanguage` | Optional language hint (ISO-639-1) | `en` |
 | `AzureOpenAI:SystemPrompt` | Default system prompt (fallback when no campaign/prompt selected) | `"You are an AI assistant..."` |
+| `AzureOpenAI:EmotionDeployment` | Optional separate deployment for emotion analysis (falls back to ChatDeployment) | `gpt-4o-mini` |
 | `AzureOpenAI:Version` | API version | `2024-10-01-preview` |
 | `BlobStorage:AccountUri` | Blob Storage account URI (Azure deployment with Managed Identity) | `https://yourstorage.blob.core.windows.net` |
 | `BlobStorage:ContainerName` | Container name for campaigns + call history | `callcenter-data` |
 
-**Note (Transcription Auth):** On-demand recording transcription uses `DefaultAzureCredential` (Entra ID) and does **not** use `AzureOpenAI:Key`. For local development, run `az login` and ensure your signed-in identity has access to the Azure OpenAI resource (e.g., “Cognitive Services OpenAI User”).
+**Note (Transcription Auth):** On-demand recording transcription uses `DefaultAzureCredential` (Entra ID) and does **not** use `AzureOpenAI:Key`. For local development, run `az login` and ensure your signed-in identity has access to the Azure OpenAI resource (e.g., â€œCognitive Services OpenAI Userâ€).
 
-### CallCenterPOC-App (Frontend)
+### ContactCenter-APP (Frontend)
 
 Set in `appsettings.json`:
 
@@ -70,7 +71,7 @@ ngrok http 5001
 ### 2. Start the API
 
 ```bash
-cd ContactCenterPOC-API
+cd ContactCenter-API
 dotnet run
 ```
 
@@ -79,7 +80,7 @@ The API starts on `https://localhost:5001` by default. Swagger UI is available a
 ### 3. Start the Web App
 
 ```bash
-cd CallCenterPOC-App
+cd ContactCenter-APP
 dotnet run
 ```
 
@@ -112,11 +113,11 @@ Each campaign has detailed AI behavior instructions (100+ characters) guiding th
 
 1. Open the web app in Chrome/Edge
 2. **Left panel**: Browse campaign cards with colored category badges, or use the search bar to filter
-3. Select a campaign — the card highlights with an accent border
+3. Select a campaign â€” the card highlights with an accent border
 4. Enter 1 or 2 phone numbers in E.164 format (e.g., `+6591234567`)
 5. Optionally expand "Prompt Override" to customize AI instructions
 6. Click **Start Call**
-7. Answer the phone — the AI agent will greet you and conduct a conversation
+7. Answer the phone â€” the AI agent will greet you and conduct a conversation
 
 #### Live Call Experience
 
@@ -137,7 +138,7 @@ Each campaign has detailed AI behavior instructions (100+ characters) guiding th
 | Success Rate | Connected vs total calls | sessionStorage |
 
 14. Click **End Call** to end the call, or wait for the 5-minute auto-timeout
-15. **Right panel**: Review completed calls — click any history item for details with sentiment breakdown bars, talk-time ratio, and full transcript
+15. **Right panel**: Review completed calls â€” click any history item for details with sentiment breakdown bars, talk-time ratio, and full transcript
 
 #### Transcribe Existing Recordings (On-Demand)
 
@@ -145,7 +146,7 @@ For historical calls that have a stored MP3/WAV recording in Blob Storage, you c
 
 1. **Right panel (History)**: Expand a completed call
 2. In **Recording Transcript**, click **Transcribe**
-3. Wait for completion — the transcript text appears and is persisted into the call history JSON (remains after refresh)
+3. Wait for completion â€” the transcript text appears and is persisted into the call history JSON (remains after refresh)
 
 API endpoint (for troubleshooting): `POST /api/CallHistory/{callConnectionId}/transcribe?force=false`
 
@@ -172,17 +173,70 @@ API endpoint (for troubleshooting): `POST /api/CallHistory/{callConnectionId}/tr
 | `BlobStorage:AccountUri` | API | No | No | Blob Storage account URI (Azure deployment with Managed Identity) |
 | `BlobStorage:ContainerName` | API | No | No | Container name for campaigns + call history (default: `callcenter-data`) |
 | `FrontendOrigin` | API | No | No | Allowed CORS origin for SignalR (defaults to `https://localhost:5002`) |
+| `CallHistory:CacheTtlSeconds` | API | No | No | How long to cache call history list responses, in seconds (default: `30`) |
+| `AzureOpenAI:EmotionDeployment` | API | No | No | Chat deployment for emotion analysis (falls back to `ChatDeployment`) |
 | `ApiBaseUrl` | App | No | Yes | Backend API URL |
+
+## Dual-Speaker Emotion Graphs & Operator Style Traits (Phase 22)
+
+Phase 22 adds real-time emotion classification for every transcript segment plus end-of-call operator style analysis.
+
+### What's New
+
+| Feature | Description |
+|---------|-------------|
+| **Emotion Analysis** | Each transcript entry (both AI operator and customer) is classified with one of 6 emotions: Neutral, Happy, Frustrated, Angry, Sad, Anxious |
+| **Dual Emotion Graphs** | Two new rolling canvas graphs below the existing Sentiment Timeline — one for Operator Emotion, one for Customer Emotion |
+| **Operator Style Traits** | At end-of-call, AI-side transcript is analyzed for Empathy (0–1) and Energy (0–1) scores |
+| **EmotionUpdate SignalR Event** | Real-time push updates to the dashboard when emotion analysis completes for an entry |
+| **Historical Emotion Data** | Emotion labels persist on each `TranscriptEntry` in blob storage and display in the call detail view |
+
+### Configuration
+
+Emotion analysis uses the same Azure OpenAI chat completions endpoint as sentiment analysis. By default, it reuses the `AzureOpenAI:ChatDeployment` deployment.
+
+To use a dedicated deployment for emotion analysis, set:
+
+```bash
+dotnet user-secrets set "AzureOpenAI:EmotionDeployment" "gpt-4o-mini-emotion"
+```
+
+Or in `appsettings.json`:
+
+```json
+{
+  "AzureOpenAI": {
+    "EmotionDeployment": "gpt-4o-mini"
+  }
+}
+```
+
+If `EmotionDeployment` is not set, the `ChatDeployment` value is used automatically.
+
+### Dashboard UI
+
+- **Operator Emotion Graph**: Colored dots on a rolling timeline (green=Happy, grey=Neutral, orange=Frustrated, red=Angry, blue=Sad, purple=Anxious)
+- **Customer Emotion Graph**: Same format, tracking the customer/recipient side
+- **Call Detail View**: Each transcript entry now shows an emotion badge alongside the existing sentiment badge
+- **Operator Style Section**: Empathy and Energy progress bars appear in the historical call detail when operator style traits were computed
+
+### Verification
+
+1. Start a call — confirm two new emotion graphs appear below the Sentiment Timeline
+2. As the conversation progresses, colored emotion dots populate both graphs
+3. End the call, then view it in History — confirm emotion badges on transcript entries
+4. If the operator spoke enough, confirm "Operator Style" section appears with Empathy and Energy bars
 
 ## Verification
 
 After setup, verify the system works:
 
-1. Navigate to `https://localhost:5001/swagger` — API docs should load with Call, Campaign, CallHistory endpoints
-2. Navigate to `https://localhost:5002` — **professional three-panel Operations Center** with deep navy header, KPI cards, and campaign cards with colored category badges
+1. Navigate to `https://localhost:5001/swagger` â€” API docs should load with Call, Campaign, CallHistory endpoints
+2. Navigate to `https://localhost:5002` â€” **professional three-panel Operations Center** with deep navy header, KPI cards, and campaign cards with colored category badges
 3. **Left panel**: Select a campaign (6 pre-defined outbound campaigns with category badges, or create a custom one)
 4. Initiate a test call to a phone you can answer
 5. Confirm: phone rings, AI speaks, you can respond, chat-bubble transcript with sentiment dots and live sentiment graph appears, call controls (end/mute/hold) work, quick responses are available
-6. **Right panel**: Verify the completed call appears in history — click it for details with sentiment breakdown, talk-time ratio, and full transcript
+6. **Right panel**: Verify the completed call appears in history â€” click it for details with sentiment breakdown, talk-time ratio, and full transcript
 7. **KPI Cards**: Verify Calls Today, Avg Duration, Sentiment, and Success Rate update after the call
 8. If the call has a recording: click **Transcribe** in the call detail panel and confirm the transcript persists after refresh
+

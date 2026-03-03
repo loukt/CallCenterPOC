@@ -15,6 +15,8 @@ namespace ContactCenterPOC.Services
         private const string AcsMetadataFileName = "0-acsmetadata.json";
         private readonly List<CallHistorySummary> _summaryCache = new();
         private bool _cacheLoaded = false;
+        private DateTimeOffset _cacheLoadedAtUtc = DateTimeOffset.MinValue;
+        private readonly TimeSpan _cacheTtl;
         private readonly SemaphoreSlim _cacheLock = new(1, 1);
 
         private static readonly JsonSerializerOptions _writeOptions = new()
@@ -34,6 +36,12 @@ namespace ContactCenterPOC.Services
             _configuration = configuration;
             _logger = logger;
             _containerName = configuration["BlobStorage:ContainerName"] ?? "callcenter-data";
+
+            _cacheTtl = TimeSpan.FromSeconds(5);
+            if (int.TryParse(configuration["CallHistory:CacheTtlSeconds"], out var cacheTtlSeconds) && cacheTtlSeconds > 0)
+            {
+                _cacheTtl = TimeSpan.FromSeconds(cacheTtlSeconds);
+            }
 
             var blobContainerUrl = configuration["BlobContainer"];
             if (!string.IsNullOrWhiteSpace(blobContainerUrl))
@@ -73,6 +81,8 @@ namespace ContactCenterPOC.Services
                 try
                 {
                     UpsertSummaryLocked(record);
+                    _cacheLoaded = true;
+                    _cacheLoadedAtUtc = DateTimeOffset.UtcNow;
                 }
                 finally
                 {
@@ -140,14 +150,18 @@ namespace ContactCenterPOC.Services
 
         private async Task EnsureCacheLoadedAsync()
         {
-            if (_cacheLoaded) return;
+            if (_cacheLoaded && (DateTimeOffset.UtcNow - _cacheLoadedAtUtc) < _cacheTtl) return;
 
             await _cacheLock.WaitAsync();
             try
             {
-                if (_cacheLoaded) return;
+                if (_cacheLoaded && (DateTimeOffset.UtcNow - _cacheLoadedAtUtc) < _cacheTtl) return;
 
                 _cacheLoaded = await LoadSummaryCacheAsync();
+                if (_cacheLoaded)
+                {
+                    _cacheLoadedAtUtc = DateTimeOffset.UtcNow;
+                }
             }
             finally
             {
@@ -386,7 +400,7 @@ namespace ContactCenterPOC.Services
             return new CallHistorySummary
             {
                 CallConnectionId = record.CallConnectionId,
-                PhoneNumber = record.PhoneNumber,
+                PhoneNumber = PhoneNumberMasker.Mask(record.PhoneNumber),
                 ContactName = record.ContactName,
                 CampaignTitle = record.CampaignTitle,
                 Duration = record.Duration.ToString(@"hh\:mm\:ss"),

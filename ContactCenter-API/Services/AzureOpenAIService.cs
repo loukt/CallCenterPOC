@@ -22,6 +22,7 @@ namespace ContactCenterPOC.Services
         private readonly string _callConnectionId;
         private readonly Func<string, Task>? _hangUpCallback;
         private readonly SentimentAnalysisService? _sentimentService;
+        private readonly EmotionAnalysisService? _emotionService;
         private readonly ConcurrentDictionary<string, ActiveCall>? _activeCalls;
         private bool _sessionReady = false;
 
@@ -33,7 +34,8 @@ namespace ContactCenterPOC.Services
             string callConnectionId,
             Func<string, Task>? hangUpCallback = null,
             SentimentAnalysisService? sentimentService = null,
-            ConcurrentDictionary<string, ActiveCall>? activeCalls = null)
+            ConcurrentDictionary<string, ActiveCall>? activeCalls = null,
+            EmotionAnalysisService? emotionService = null)
         {
             m_mediaStreaming = mediaStreaming;
             m_cts = new CancellationTokenSource();
@@ -43,6 +45,7 @@ namespace ContactCenterPOC.Services
             _callConnectionId = callConnectionId;
             _hangUpCallback = hangUpCallback;
             _sentimentService = sentimentService;
+            _emotionService = emotionService;
             _activeCalls = activeCalls;
 
             try
@@ -68,7 +71,8 @@ namespace ContactCenterPOC.Services
             string callConnectionId,
             Func<string, Task>? hangUpCallback = null,
             SentimentAnalysisService? sentimentService = null,
-            ConcurrentDictionary<string, ActiveCall>? activeCalls = null)
+            ConcurrentDictionary<string, ActiveCall>? activeCalls = null,
+            EmotionAnalysisService? emotionService = null)
         {
             m_mediaStreaming = mediaStreaming;
             m_cts = new CancellationTokenSource();
@@ -78,6 +82,7 @@ namespace ContactCenterPOC.Services
             _callConnectionId = callConnectionId;
             _hangUpCallback = hangUpCallback;
             _sentimentService = sentimentService;
+            _emotionService = emotionService;
             _activeCalls = activeCalls;
 
             try
@@ -205,6 +210,8 @@ namespace ContactCenterPOC.Services
 
                         // Fire-and-forget sentiment analysis
                         FireAndForgetSentiment(aiEntry);
+                        // Fire-and-forget emotion analysis
+                        FireAndForgetEmotion(aiEntry);
                     }
 
                     // Audio delta updates contain the incremental binary audio data of the generated output
@@ -255,6 +262,8 @@ namespace ContactCenterPOC.Services
 
                         // Fire-and-forget sentiment analysis
                         FireAndForgetSentiment(recipientEntry);
+                        // Fire-and-forget emotion analysis
+                        FireAndForgetEmotion(recipientEntry);
                     }
 
                     if (update is ConversationResponseFinishedUpdate turnFinishedUpdate)
@@ -298,11 +307,11 @@ namespace ContactCenterPOC.Services
             {
                 try
                 {
-                    // Build rolling 10-second context: aggregate recent transcript for better sentiment
+                    // Build rolling 5-second context: aggregate recent transcript for better sentiment
                     string textToAnalyze = entry.Text;
                     if (_activeCalls != null && _activeCalls.TryGetValue(_callConnectionId, out var call))
                     {
-                        var cutoff = entry.Timestamp.AddSeconds(-10);
+                        var cutoff = entry.Timestamp.AddSeconds(-5);
                         var recentEntries = call.TranscriptEntries
                             .Where(e => e.Timestamp >= cutoff && e.Timestamp <= entry.Timestamp)
                             .OrderBy(e => e.Timestamp)
@@ -329,6 +338,49 @@ namespace ContactCenterPOC.Services
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "[AI-{CallId}] Sentiment analysis failed for entry", _callConnectionId);
+                }
+            });
+        }
+
+        private void FireAndForgetEmotion(TranscriptEntry entry)
+        {
+            if (_emotionService == null) return;
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    // Build rolling 5-second context (same as sentiment)
+                    string textToAnalyze = entry.Text;
+                    if (_activeCalls != null && _activeCalls.TryGetValue(_callConnectionId, out var call))
+                    {
+                        var cutoff = entry.Timestamp.AddSeconds(-5);
+                        var recentEntries = call.TranscriptEntries
+                            .Where(e => e.Timestamp >= cutoff && e.Timestamp <= entry.Timestamp)
+                            .OrderBy(e => e.Timestamp)
+                            .ToList();
+
+                        if (recentEntries.Count > 1)
+                        {
+                            textToAnalyze = string.Join(" ", recentEntries.Select(e => e.Text));
+                        }
+                    }
+
+                    var emotion = await _emotionService.AnalyzeAsync(textToAnalyze);
+                    entry.Emotion = emotion;
+
+                    // Send EmotionUpdate event to the frontend
+                    await _hubContext.Clients.Group(_callConnectionId)
+                        .SendAsync("EmotionUpdate", new
+                        {
+                            callConnectionId = _callConnectionId,
+                            entryTimestamp = entry.Timestamp,
+                            emotion = emotion
+                        });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "[AI-{CallId}] Emotion analysis failed for entry", _callConnectionId);
                 }
             });
         }

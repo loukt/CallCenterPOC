@@ -7,57 +7,51 @@ using System.Text.Json;
 
 namespace ContactCenterPOC.Services
 {
-    public class SentimentAnalysisService
+    public class EmotionAnalysisService
     {
         private readonly Uri? _endpointUri;
         private readonly string? _apiKey;
         private readonly string? _deployment;
         private readonly TokenCredential? _credential;
-        private readonly ILogger<SentimentAnalysisService> _logger;
+        private readonly ILogger<EmotionAnalysisService> _logger;
 
         private static readonly HttpClient HttpClient = new()
         {
             Timeout = TimeSpan.FromSeconds(20)
         };
 
-        // gpt-5-nano in Azure OpenAI requires `max_completion_tokens` (not `max_tokens`).
-        // It also rejects `temperature=0`, so we omit temperature entirely.
         private const string ChatCompletionsApiVersion = "2024-10-01-preview";
-        private const int SentimentMaxCompletionTokens = 200;
-        private const string SentimentReasoningEffort = "low";
-        private const int SentimentLegacyMaxTokens = 50;
-        private const float SentimentLegacyTemperature = 0f;
+        private const int EmotionMaxCompletionTokens = 200;
+        private const string EmotionReasoningEffort = "low";
+        private const int EmotionLegacyMaxTokens = 50;
+        private const float EmotionLegacyTemperature = 0f;
 
-        private const string SentimentSystemPrompt =
-            "You are a sentiment analysis service. Classify the sentiment of the given text as Positive, Neutral, or Negative. " +
-            "Respond ONLY with a JSON object: {\"label\":\"Positive|Neutral|Negative\",\"confidence\":0.0-1.0}. " +
+        private const string EmotionSystemPrompt =
+            "You are an emotion classification service. Classify the emotion of the given text into exactly one of these labels: " +
+            "Neutral, Happy, Frustrated, Angry, Sad, Anxious. " +
+            "Respond ONLY with a JSON object: {\"label\":\"Neutral|Happy|Frustrated|Angry|Sad|Anxious\",\"confidence\":0.0-1.0}. " +
             "No other text or explanation.";
 
-        public SentimentAnalysisService(IConfiguration configuration, ILogger<SentimentAnalysisService> logger)
+        public EmotionAnalysisService(IConfiguration configuration, ILogger<EmotionAnalysisService> logger)
         {
             _logger = logger;
 
             var endpointUri = configuration["AzureOpenAI:EndpointUri"];
             var apiKey = configuration["AzureOpenAI:Key"];
-            // Prefer a dedicated deployment for sentiment (so it can be configured independently).
-            var sentimentDeployment = configuration["AzureOpenAI:SentimentDeployment"];
-            var chatDeployment = sentimentDeployment
+            var emotionDeployment = configuration["AzureOpenAI:EmotionDeployment"];
+            var chatDeployment = emotionDeployment
                 ?? configuration["AzureOpenAI:ChatDeployment"]
-                ?? configuration["AzureOpenAI:DeploymentName"]; // fallback for older/partial configs
+                ?? configuration["AzureOpenAI:DeploymentName"];
 
             if (string.IsNullOrEmpty(endpointUri) || string.IsNullOrEmpty(chatDeployment))
             {
-                _logger.LogWarning("AzureOpenAI:EndpointUri or AzureOpenAI:ChatDeployment not configured. Sentiment analysis disabled.");
+                _logger.LogWarning("AzureOpenAI:EndpointUri or AzureOpenAI:ChatDeployment not configured. Emotion analysis disabled.");
                 return;
             }
 
-            if (!string.IsNullOrEmpty(sentimentDeployment))
+            if (!string.IsNullOrEmpty(emotionDeployment))
             {
-                _logger.LogInformation("AzureOpenAI:SentimentDeployment is set; using '{Deployment}' for sentiment.", chatDeployment);
-            }
-            else if (string.IsNullOrEmpty(configuration["AzureOpenAI:ChatDeployment"]))
-            {
-                _logger.LogWarning("AzureOpenAI:ChatDeployment not set; using fallback deployment '{Deployment}' for sentiment.", chatDeployment);
+                _logger.LogInformation("AzureOpenAI:EmotionDeployment is set; using '{Deployment}' for emotion.", chatDeployment);
             }
 
             try
@@ -65,38 +59,37 @@ namespace ContactCenterPOC.Services
                 if (!string.IsNullOrWhiteSpace(apiKey))
                 {
                     _apiKey = apiKey;
-                    _logger.LogInformation("SentimentAnalysisService using AzureOpenAI:Key authentication.");
+                    _logger.LogInformation("EmotionAnalysisService using AzureOpenAI:Key authentication.");
                 }
                 else
                 {
-                    // DefaultAzureCredential (Managed Identity on Azure, Azure CLI locally).
                     _credential = new DefaultAzureCredential();
-                    _logger.LogInformation("SentimentAnalysisService using DefaultAzureCredential (Managed Identity / Entra ID).");
+                    _logger.LogInformation("EmotionAnalysisService using DefaultAzureCredential (Managed Identity / Entra ID).");
                 }
 
                 _endpointUri = new Uri(endpointUri);
                 _deployment = chatDeployment;
                 _logger.LogInformation(
-                    "SentimentAnalysisService initialized (endpointHost={EndpointHost}, deployment={Deployment})",
+                    "EmotionAnalysisService initialized (endpointHost={EndpointHost}, deployment={Deployment})",
                     new Uri(endpointUri).Host,
                     chatDeployment);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to initialize SentimentAnalysisService");
+                _logger.LogError(ex, "Failed to initialize EmotionAnalysisService");
             }
         }
 
-        public async Task<SentimentResult> AnalyzeAsync(string? text)
+        public async Task<EmotionResult> AnalyzeAsync(string? text)
         {
             if (string.IsNullOrWhiteSpace(text))
             {
-                return new SentimentResult { Label = SentimentLabel.Neutral, Confidence = 0f };
+                return new EmotionResult { Label = EmotionLabel.Neutral, Confidence = 0f };
             }
 
             if (_endpointUri == null || string.IsNullOrWhiteSpace(_deployment))
             {
-                return new SentimentResult { Label = SentimentLabel.Neutral, Confidence = 0f };
+                return new EmotionResult { Label = EmotionLabel.Neutral, Confidence = 0f };
             }
 
             try
@@ -105,13 +98,12 @@ namespace ContactCenterPOC.Services
                     _endpointUri,
                     $"openai/deployments/{Uri.EscapeDataString(_deployment)}/chat/completions?api-version={ChatCompletionsApiVersion}");
 
-                // Use explicit (snake_case) properties to match the chat completions REST schema.
                 var messages = new object[]
                 {
                     new Dictionary<string, object?>
                     {
                         ["role"] = "system",
-                        ["content"] = SentimentSystemPrompt
+                        ["content"] = EmotionSystemPrompt
                     },
                     new Dictionary<string, object?>
                     {
@@ -120,24 +112,24 @@ namespace ContactCenterPOC.Services
                     }
                 };
 
-                // Attempt 1: gpt-5-nano-compatible parameters.
+                // Attempt 1: gpt-5-nano-compatible parameters
                 var requestBody = new Dictionary<string, object?>
                 {
                     ["messages"] = messages,
-                    ["max_completion_tokens"] = SentimentMaxCompletionTokens,
-                    ["reasoning_effort"] = SentimentReasoningEffort
+                    ["max_completion_tokens"] = EmotionMaxCompletionTokens,
+                    ["reasoning_effort"] = EmotionReasoningEffort
                 };
 
                 var (statusCode, responseBody) = await PostChatCompletionsAsync(uri, requestBody);
 
-                // If the deployment is an older non-reasoning chat model, it may reject the newer parameters.
+                // Retry with legacy parameters if needed
                 if (statusCode == HttpStatusCode.BadRequest && LooksLikeUnsupportedParam(responseBody))
                 {
                     var legacyBody = new Dictionary<string, object?>
                     {
                         ["messages"] = messages,
-                        ["max_tokens"] = SentimentLegacyMaxTokens,
-                        ["temperature"] = SentimentLegacyTemperature
+                        ["max_tokens"] = EmotionLegacyMaxTokens,
+                        ["temperature"] = EmotionLegacyTemperature
                     };
 
                     (statusCode, responseBody) = await PostChatCompletionsAsync(uri, legacyBody);
@@ -145,40 +137,30 @@ namespace ContactCenterPOC.Services
 
                 if (statusCode != HttpStatusCode.OK)
                 {
-                    if ((int)statusCode == 404
-                        && responseBody.IndexOf("DeploymentNotFound", StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        _logger.LogWarning(
-                            "Sentiment deployment was not found (HTTP 404 DeploymentNotFound). Verify AzureOpenAI:SentimentDeployment/AzureOpenAI:ChatDeployment is the *deployment name* that exists on the Azure OpenAI resource (not just the model name). Text length: {Length}",
-                            text.Length);
-                        return new SentimentResult { Label = SentimentLabel.Neutral, Confidence = 0f };
-                    }
-
                     _logger.LogWarning(
-                        "Sentiment analysis HTTP {StatusCode} for text ({Length} chars). Body: {Body}",
+                        "Emotion analysis HTTP {StatusCode} for text ({Length} chars). Body: {Body}",
                         (int)statusCode,
                         text.Length,
                         TruncateForLog(responseBody, 1000));
 
-                    return new SentimentResult { Label = SentimentLabel.Neutral, Confidence = 0f };
+                    return new EmotionResult { Label = EmotionLabel.Neutral, Confidence = 0f };
                 }
 
                 var content = ExtractAssistantContent(responseBody);
                 if (string.IsNullOrWhiteSpace(content))
                 {
                     _logger.LogWarning(
-                        "Sentiment analysis returned empty content for text ({Length} chars). Raw response: {Body}",
-                        text.Length,
-                        TruncateForLog(responseBody, 1000));
-                    return new SentimentResult { Label = SentimentLabel.Neutral, Confidence = 0f };
+                        "Emotion analysis returned empty content for text ({Length} chars).",
+                        text.Length);
+                    return new EmotionResult { Label = EmotionLabel.Neutral, Confidence = 0f };
                 }
 
-                return ParseSentimentJson(content);
+                return ParseEmotionJson(content);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Sentiment analysis failed for text ({Length} chars), returning Neutral", text.Length);
-                return new SentimentResult { Label = SentimentLabel.Neutral, Confidence = 0f };
+                _logger.LogWarning(ex, "Emotion analysis failed for text ({Length} chars), returning Neutral", text.Length);
+                return new EmotionResult { Label = EmotionLabel.Neutral, Confidence = 0f };
             }
         }
 
@@ -216,9 +198,6 @@ namespace ContactCenterPOC.Services
 
         private static bool LooksLikeUnsupportedParam(string responseBody)
         {
-            // Azure OpenAI error bodies include helpful text like:
-            // "Unsupported parameter: 'max_tokens'" or "Unsupported value: 'temperature'".
-            // We use a broad check so we can retry with the other parameter shape.
             if (string.IsNullOrWhiteSpace(responseBody)) return false;
             return responseBody.IndexOf("Unsupported parameter", StringComparison.OrdinalIgnoreCase) >= 0
                 || responseBody.IndexOf("does not support", StringComparison.OrdinalIgnoreCase) >= 0;
@@ -259,11 +238,11 @@ namespace ContactCenterPOC.Services
             return value.Length <= maxLength ? value : value.Substring(0, maxLength) + "…";
         }
 
-        public static SentimentResult ParseSentimentJson(string? json)
+        public static EmotionResult ParseEmotionJson(string? json)
         {
             if (string.IsNullOrWhiteSpace(json))
             {
-                return new SentimentResult { Label = SentimentLabel.Neutral, Confidence = 0f };
+                return new EmotionResult { Label = EmotionLabel.Neutral, Confidence = 0f };
             }
 
             try
@@ -278,12 +257,15 @@ namespace ContactCenterPOC.Services
 
                 var label = labelStr.ToLowerInvariant() switch
                 {
-                    "positive" => SentimentLabel.Positive,
-                    "negative" => SentimentLabel.Negative,
-                    _ => SentimentLabel.Neutral
+                    "happy" => EmotionLabel.Happy,
+                    "frustrated" => EmotionLabel.Frustrated,
+                    "angry" => EmotionLabel.Angry,
+                    "sad" => EmotionLabel.Sad,
+                    "anxious" => EmotionLabel.Anxious,
+                    _ => EmotionLabel.Neutral
                 };
 
-                return new SentimentResult { Label = label, Confidence = confidence };
+                return new EmotionResult { Label = label, Confidence = confidence };
             }
             catch
             {
@@ -308,12 +290,15 @@ namespace ContactCenterPOC.Services
 
                         var label = labelStr.ToLowerInvariant() switch
                         {
-                            "positive" => SentimentLabel.Positive,
-                            "negative" => SentimentLabel.Negative,
-                            _ => SentimentLabel.Neutral
+                            "happy" => EmotionLabel.Happy,
+                            "frustrated" => EmotionLabel.Frustrated,
+                            "angry" => EmotionLabel.Angry,
+                            "sad" => EmotionLabel.Sad,
+                            "anxious" => EmotionLabel.Anxious,
+                            _ => EmotionLabel.Neutral
                         };
 
-                        return new SentimentResult { Label = label, Confidence = confidence };
+                        return new EmotionResult { Label = label, Confidence = confidence };
                     }
                 }
                 catch
@@ -321,7 +306,7 @@ namespace ContactCenterPOC.Services
                     // ignore
                 }
 
-                return new SentimentResult { Label = SentimentLabel.Neutral, Confidence = 0f };
+                return new EmotionResult { Label = EmotionLabel.Neutral, Confidence = 0f };
             }
         }
     }

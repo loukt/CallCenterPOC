@@ -76,6 +76,8 @@ else
 
 builder.Services.AddSingleton<CampaignService>();
 builder.Services.AddSingleton<SentimentAnalysisService>();
+builder.Services.AddSingleton<EmotionAnalysisService>();
+builder.Services.AddSingleton<OperatorStyleAnalysisService>();
 builder.Services.AddSingleton<CallHistoryService>();
 builder.Services.AddHttpClient("AzureOpenAITranscription", client =>
 {
