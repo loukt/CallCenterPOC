@@ -374,3 +374,71 @@ Add per-speaker emotion detection (operator/AI vs customer/recipient) and visual
 | `ContactCenter-APP/Pages/Index.cshtml` | Add two emotion graphs (operator/customer) in live view and historical detail |
 | `ContactCenter-APP/wwwroot/js/site.js` | Handle emotion update events and update both graphs |
 
+---
+
+## Phase 33: Quick Wins + Settings Overlay (US13 + US14)
+
+### Summary
+
+Eight improvements in a single phase: five quick wins from code analysis and three new features (settings overlay, max call time configuration, post-call summary generation). This phase also restructures the three analysis services to share a common base class.
+
+### Quick Wins
+
+1. **Re-enable Swagger production guard (FR-068)**: Un-comment the `if (app.Environment.IsDevelopment())` guard around `app.UseSwagger()` / `app.UseSwaggerUI()` in `Program.cs`. One-line security fix.
+2. **Add health check endpoint (FR-063)**: Add `app.MapGet("/healthz", ...)` to `Program.cs` returning basic service status. Three lines of code, enables load balancer probes and uptime monitoring.
+3. **Extract shared analysis base class (FR-067)**: Create `AzureOpenAIAnalysisBase` that handles Azure OpenAI HTTP client construction, `DefaultAzureCredential` / API key auth, token caching, chat completion requests with retry (primary params → legacy params fallback), and JSON response parsing. Refactor `SentimentAnalysisService`, `EmotionAnalysisService`, and `OperatorStyleAnalysisService` to inherit from this base. Eliminates ~200 lines of duplicated code.
+4. **Add pagination to call history (FR-064)**: Update `GET /api/CallHistory` to accept `page` and `pageSize` query params (default 1/20). Return `{ totalCount, page, pageSize, items[] }`. Update frontend to load pages on demand.
+5. **Add post-call summary generation (FR-066, US14)**: After call disconnect, use the existing Azure OpenAI chat completions integration to summarize the transcript in 2-4 sentences. Persist as `CallSummary` field on `CallRecord`. Display in historical detail view.
+
+### Settings Overlay (US13)
+
+- **Gear icon**: Add an SVG gear icon to the right side of the dashboard header bar. On click, open a right-side overlay panel.
+- **Settings overlay**: Dark-themed panel matching the sidebar style. Contains:
+  - **Max Call Time**: Slider or numeric input (1-10 min, default 2 min). Persisted via `PUT /api/Settings`.
+  - **Voice API**: Radio/toggle between "ChatGPT Realtime" (active) and "Voice Live" (disabled, "Coming Soon" badge).
+  - Close button (X) + click-outside-to-dismiss.
+- **Backend**: `SettingsController` with `GET /api/Settings` and `PUT /api/Settings`. Settings persisted as `settings.json` in Blob Storage.
+- **CallService integration**: Read max call time from `SettingsService` instead of hardcoded `TimeSpan.FromMinutes(5)`. Default 2 minutes.
+
+### Technical Approach
+
+**Shared Analysis Base Class**:
+- Create `ContactCenter-API/Services/AzureOpenAIAnalysisBase.cs` with:
+  - Constructor accepting `IConfiguration`, `ILogger`, optional deployment config key overrides
+  - `_endpointUri`, `_apiKey`, `_deployment`, `_credential` fields (moved from each service)
+  - `bool IsConfigured` property
+  - `Task<string?> CallChatCompletionAsync(string systemPrompt, string userMessage, int maxTokens, string? reasoningEffort)` — handles auth, request construction with primary/legacy parameter retry, JSON response extraction
+- Refactor each service to inherit and call `CallChatCompletionAsync()` with their specific prompts and parsing logic.
+
+**Settings Persistence**:
+- `SettingsService`: singleton, reads/writes `settings.json` blob in the same container as campaigns/history
+- Settings model: `{ maxCallTimeMinutes: 2, voiceApi: "chatgpt-realtime" }`
+- `CallService.InitiateCall()`: inject `SettingsService`, read `maxCallTimeMinutes` to set `CancelAfter`
+
+**Post-Call Summary**:
+- Reuse the shared base class to call chat completions with a summarization prompt
+- Generate summary asynchronously on disconnect (fire-and-forget with error logging)
+- Add `CallSummary` (string?) to `CallRecord` model
+
+### Files Changed (Expected)
+
+| File | Change |
+|------|--------|
+| `ContactCenter-API/Program.cs` | Re-enable Swagger guard; add `/healthz` endpoint; register `SettingsService` |
+| `ContactCenter-API/Services/AzureOpenAIAnalysisBase.cs` | New: shared base class for Azure OpenAI analysis services |
+| `ContactCenter-API/Services/SentimentAnalysisService.cs` | Refactor to inherit from `AzureOpenAIAnalysisBase` |
+| `ContactCenter-API/Services/EmotionAnalysisService.cs` | Refactor to inherit from `AzureOpenAIAnalysisBase` |
+| `ContactCenter-API/Services/OperatorStyleAnalysisService.cs` | Refactor to inherit from `AzureOpenAIAnalysisBase` |
+| `ContactCenter-API/Services/CallSummaryService.cs` | New: post-call summary generation |
+| `ContactCenter-API/Services/SettingsService.cs` | New: settings persistence (Blob JSON) |
+| `ContactCenter-API/Controllers/SettingsController.cs` | New: GET/PUT /api/Settings |
+| `ContactCenter-API/Controllers/CallHistoryController.cs` | Add pagination support to GET endpoint |
+| `ContactCenter-API/Services/CallHistoryService.cs` | Add pagination to `GetAllAsync()`; add `CallSummary` support |
+| `ContactCenter-API/Models/CallRecord.cs` | Add `CallSummary` field |
+| `ContactCenter-API/Models/Settings.cs` | New: settings model |
+| `ContactCenter-API/Services/CallService.cs` | Use `SettingsService` for max call time |
+| `ContactCenter-APP/Pages/Shared/_Layout.cshtml` | Add gear icon to header |
+| `ContactCenter-APP/Pages/Index.cshtml` | Add settings overlay markup |
+| `ContactCenter-APP/wwwroot/js/site.js` | Settings overlay logic, pagination, summary display |
+| `ContactCenter-APP/wwwroot/css/site.css` | Settings overlay styles, pagination styles |
+

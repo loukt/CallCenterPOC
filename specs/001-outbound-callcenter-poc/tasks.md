@@ -789,3 +789,63 @@ Work sequentially: Phase 1 â†’ 2 â†’ 3 â†’ 4 â†’ 5 â†’ 
 - [x] T148 [P] Add unit tests for `EmotionAnalysisService` and operator trait computation in `CallCenterPOC-API.Tests/Unit/` (mirroring `SentimentAnalysisTests` patterns). Include a test for graceful Neutral fallback on AOAI errors.
 - [x] T149 Update quickstart.md: document emotion analysis (same Azure OpenAI deployment as sentiment), the dual-speaker emotion graph UI, and operator style traits displayed in historical call detail.
 
+---
+
+## Phase 33: Quick Wins + Settings Overlay (US13 + US14)
+
+**Purpose**: Five quick wins from code analysis (Swagger guard, health check, shared base class, pagination, post-call summary) plus a settings overlay with configurable max call time and Voice API selector.
+
+**Independent Test**: Verify Swagger is not accessible in production. Hit `/healthz` — returns 200. Open call history — paginated (20 per page). Place a call — auto-terminates at configured max time (default 2 min). Click the gear icon — settings overlay opens. Change max call time to 3 min — new calls respect it. After call ends — summary appears in historical detail.
+
+### Quick Win 1: Swagger Production Guard
+
+- [ ] T150 [FR-068] Update `ContactCenter-API/Program.cs`: re-enable the `if (app.Environment.IsDevelopment())` guard around `app.UseSwagger()` and `app.UseSwaggerUI()`. Un-comment the conditional that was commented out during debugging.
+
+### Quick Win 2: Health Check Endpoint
+
+- [ ] T151 [FR-063] Update `ContactCenter-API/Program.cs`: add `app.MapGet("/healthz", () => Results.Ok(new { status = "healthy", timestamp = DateTimeOffset.UtcNow }))` before `app.Run()`.
+
+### Quick Win 3: Shared Analysis Base Class
+
+- [ ] T152 [FR-067] Create `ContactCenter-API/Services/AzureOpenAIAnalysisBase.cs`: abstract base class with Azure OpenAI HTTP client setup (endpoint, auth via `DefaultAzureCredential` or API key), shared `CallChatCompletionAsync(systemPrompt, userMessage, maxTokens, reasoningEffort)` method with primary/legacy parameter retry logic, and JSON response extraction. Move the duplicated fields (`_endpointUri`, `_apiKey`, `_deployment`, `_credential`, `HttpClient`, constants) from the three analysis services into this base.
+- [ ] T153 [P] [FR-067] Refactor `ContactCenter-API/Services/SentimentAnalysisService.cs` to inherit from `AzureOpenAIAnalysisBase`. Remove duplicated auth/HTTP code. Keep sentiment-specific prompt and result parsing.
+- [ ] T154 [P] [FR-067] Refactor `ContactCenter-API/Services/EmotionAnalysisService.cs` to inherit from `AzureOpenAIAnalysisBase`. Remove duplicated auth/HTTP code. Keep emotion-specific prompt and result parsing.
+- [ ] T155 [P] [FR-067] Refactor `ContactCenter-API/Services/OperatorStyleAnalysisService.cs` to inherit from `AzureOpenAIAnalysisBase`. Remove duplicated auth/HTTP code. Keep operator-traits-specific prompt and result parsing.
+
+### Quick Win 4: Call History Pagination
+
+- [ ] T156 [FR-064] Update `ContactCenter-API/Services/CallHistoryService.cs`: add `GetPagedAsync(int page, int pageSize)` method that returns `{ totalCount, page, pageSize, items[] }`. Builds on existing `GetAllAsync()` cached summaries.
+- [ ] T157 [FR-064] Update `ContactCenter-API/Controllers/CallHistoryController.cs`: update `GET /api/CallHistory` to accept `page` (default 1) and `pageSize` (default 20) query parameters. Return paginated response wrapper.
+- [ ] T158 [FR-064] Update `ContactCenter-APP/wwwroot/js/site.js`: update `loadCallHistory()` to pass `page`/`pageSize` parameters. Add "Load More" button or page navigation in the historical calls tab.
+
+### Quick Win 5: Post-Call Summary Generation
+
+- [ ] T159 [FR-066] [US14] Add `CallSummary` (string?) and `SummarizedAt` (DateTimeOffset?) fields to `ContactCenter-API/Models/CallRecord.cs`.
+- [ ] T160 [FR-066] [US14] Create `ContactCenter-API/Services/CallSummaryService.cs`: inherits from `AzureOpenAIAnalysisBase`. Method `GenerateSummaryAsync(List<TranscriptEntry> entries)` sends transcript to Azure OpenAI with a summarization prompt and returns a 2-4 sentence summary string.
+- [ ] T161 [FR-066] [US14] Update call disconnect persistence in `CallService` or `CallbackController`: after building the `CallRecord`, call `CallSummaryService.GenerateSummaryAsync()` and set `CallRecord.CallSummary`. Fire-and-forget with error logging (don't block disconnect).
+- [ ] T162 [US14] Update `ContactCenter-APP/wwwroot/js/site.js`: display `CallSummary` in the historical detail center panel, above the transcript, in a styled summary card.
+
+### Settings Overlay — Backend
+
+- [ ] T163 [FR-065] Create `ContactCenter-API/Models/Settings.cs`: `OperatorSettings` model with `MaxCallTimeMinutes` (int, default 2), `VoiceApi` (string, default "chatgpt-realtime").
+- [ ] T164 [FR-065] Create `ContactCenter-API/Services/SettingsService.cs`: singleton service that reads/writes `settings.json` in the configured Blob container. Methods: `GetSettingsAsync()`, `SaveSettingsAsync(OperatorSettings)`. Cache in memory, invalidate on save.
+- [ ] T165 [FR-065] Create `ContactCenter-API/Controllers/SettingsController.cs`: `GET /api/Settings` returns current settings. `PUT /api/Settings` accepts updated settings body and persists via `SettingsService`.
+- [ ] T166 [FR-061] Update `ContactCenter-API/Services/CallService.cs`: inject `SettingsService`. In `InitiateCall()`, read `MaxCallTimeMinutes` from settings instead of hardcoded `TimeSpan.FromMinutes(5)`. Default to 2 minutes if settings unavailable.
+- [ ] T167 Register `CallSummaryService` and `SettingsService` as singletons in `ContactCenter-API/Program.cs`.
+
+### Settings Overlay — Frontend
+
+- [ ] T168 [FR-060] Update `ContactCenter-APP/Pages/Shared/_Layout.cshtml`: add a gear icon (SVG) to the right side of the header bar, before the "Operations Dashboard" badge. Wire `onclick` to toggle settings overlay.
+- [ ] T169 [FR-060] Update `ContactCenter-APP/Pages/Index.cshtml`: add settings overlay HTML — a right-side sliding panel with dark theme. Contains: Max Call Time slider/input (1-10 min), Voice API selector (radio buttons), close button.
+- [ ] T170 [FR-060] [FR-061] [FR-062] Update `ContactCenter-APP/wwwroot/js/site.js`: settings overlay open/close logic, load settings on page load via `GET /api/Settings`, save on change via `PUT /api/Settings`. Disable "Voice Live" option with "Coming Soon" badge.
+- [ ] T171 Update `ContactCenter-APP/wwwroot/css/site.css`: settings overlay styles (slide-in animation, dark theme matching sidebar, form controls styling, backdrop dimming).
+
+### Tests
+
+- [ ] T172 [P] Add `SettingsControllerContractTests` in `CallCenterPOC-API.Tests/Contract/`: test (a) `GET /api/Settings` returns 200 with default settings, (b) `PUT /api/Settings` with valid body returns 200 and persists, (c) `GET /healthz` returns 200 with status "healthy".
+- [ ] T173 [P] Add `CallSummaryServiceTests` in `CallCenterPOC-API.Tests/Unit/`: test summary generation with mock transcript entries. Test graceful null return on AOAI errors.
+- [ ] T174 [P] Update `CallHistoryContractTests`: test pagination — verify `GET /api/CallHistory?page=1&pageSize=5` returns at most 5 items with `totalCount`.
+- [ ] T175 Verify all existing tests still pass after base class refactoring (SentimentAnalysisTests, EmotionAnalysisTests, CampaignServiceTests).
+
+**Checkpoint**: Swagger restricted to dev. Health check available. Analysis services share base class. History paginated. Post-call summary generated. Settings overlay functional with max call time (2 min default) and Voice API selector.
+

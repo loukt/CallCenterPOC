@@ -1301,7 +1301,17 @@
     // RIGHT PANEL — Call History
     // ═══════════════════════════════════════════════════════════
 
-    window.loadCallHistory = function () {
+    var historyPage = 1;
+    var historyPageSize = 20;
+    var historyTotalCount = 0;
+
+    window.loadCallHistory = function (page) {
+        if (typeof page === "number" && page >= 1) {
+            historyPage = page;
+        } else {
+            historyPage = 1;
+        }
+
         var loading = document.getElementById("historyLoading");
         var empty = document.getElementById("historyEmpty");
         var list = document.getElementById("historyList");
@@ -1310,13 +1320,20 @@
         empty.classList.add("d-none");
         list.classList.add("d-none");
 
-        fetch(apiBaseUrl() + "/api/CallHistory")
+        fetch(apiBaseUrl() + "/api/CallHistory?page=" + historyPage + "&pageSize=" + historyPageSize)
             .then(function (resp) { return resp.json(); })
-            .then(function (data) {
+            .then(function (result) {
                 loading.classList.add("d-none");
 
+                // Support paginated response {totalCount, page, pageSize, items}
+                var data = result.items || result;
+                historyTotalCount = result.totalCount || (Array.isArray(data) ? data.length : 0);
+                historyPage = result.page || historyPage;
+
                 if (!data || data.length === 0) {
-                    empty.classList.remove("d-none");
+                    if (historyPage <= 1) {
+                        empty.classList.remove("d-none");
+                    }
                     return;
                 }
 
@@ -1351,6 +1368,20 @@
 
                     list.appendChild(div);
                 });
+
+                // Pagination controls
+                var totalPages = Math.ceil(historyTotalCount / historyPageSize);
+                if (totalPages > 1) {
+                    var paginationDiv = document.createElement("div");
+                    paginationDiv.className = "history-pagination";
+                    paginationDiv.innerHTML =
+                        '<button class="btn btn-sm btn-outline-light" ' + (historyPage <= 1 ? 'disabled' : '') +
+                        ' onclick="loadCallHistory(' + (historyPage - 1) + ')">&laquo; Prev</button>' +
+                        '<span class="pagination-info">Page ' + historyPage + ' of ' + totalPages + '</span>' +
+                        '<button class="btn btn-sm btn-outline-light" ' + (historyPage >= totalPages ? 'disabled' : '') +
+                        ' onclick="loadCallHistory(' + (historyPage + 1) + ')">Next &raquo;</button>';
+                    list.appendChild(paginationDiv);
+                }
 
                 list.classList.remove("d-none");
             })
@@ -1474,6 +1505,18 @@
                         setBar("energyBar", record.operatorStyleTraits.energy * 100);
                     } else {
                         traitsSection.style.display = "none";
+                    }
+                }
+
+                // Post-call summary
+                var summarySection = document.getElementById("callSummarySection");
+                var summaryText = document.getElementById("callSummaryText");
+                if (summarySection) {
+                    if (record.callSummary) {
+                        summarySection.style.display = "block";
+                        if (summaryText) summaryText.textContent = record.callSummary;
+                    } else {
+                        summarySection.style.display = "none";
                     }
                 }
 
@@ -1752,5 +1795,70 @@
 
         // Render KPIs from session
         renderKPIs();
+
+        // Load settings into overlay
+        loadSettings();
     });
+
+    // ═══════════════════════════════════════════════════════════
+    // SETTINGS OVERLAY
+    // ═══════════════════════════════════════════════════════════
+
+    window.toggleSettingsOverlay = function () {
+        var overlay = document.getElementById("settingsOverlay");
+        if (!overlay) return;
+        if (overlay.classList.contains("d-none")) {
+            loadSettings();
+            overlay.classList.remove("d-none");
+        } else {
+            overlay.classList.add("d-none");
+        }
+    };
+
+    function loadSettings() {
+        fetch(apiBaseUrl() + "/api/Settings")
+            .then(function (resp) { return resp.json(); })
+            .then(function (settings) {
+                var maxCallInput = document.getElementById("settingsMaxCallTime");
+                if (maxCallInput) maxCallInput.value = settings.maxCallTimeMinutes || 2;
+
+                var radios = document.querySelectorAll('input[name="voiceApiMode"]');
+                radios.forEach(function (r) {
+                    r.checked = (r.value === settings.voiceApiMode);
+                });
+            })
+            .catch(function (err) {
+                console.error("Failed to load settings:", err);
+            });
+    }
+
+    window.saveSettings = function () {
+        var maxCallInput = document.getElementById("settingsMaxCallTime");
+        var voiceRadio = document.querySelector('input[name="voiceApiMode"]:checked');
+
+        var payload = {
+            maxCallTimeMinutes: parseFloat(maxCallInput.value) || 2,
+            voiceApiMode: voiceRadio ? voiceRadio.value : "ChatGPT"
+        };
+
+        var saveBtn = document.getElementById("saveSettingsBtn");
+        if (saveBtn) saveBtn.disabled = true;
+
+        fetch(apiBaseUrl() + "/api/Settings", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        })
+            .then(function (resp) { return resp.json(); })
+            .then(function (saved) {
+                if (saveBtn) saveBtn.disabled = false;
+                showToast("Settings saved.");
+                toggleSettingsOverlay();
+            })
+            .catch(function (err) {
+                if (saveBtn) saveBtn.disabled = false;
+                showToast("Failed to save settings.");
+                console.error("Error saving settings:", err);
+            });
+    };
 })();

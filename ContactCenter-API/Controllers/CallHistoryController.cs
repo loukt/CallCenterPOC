@@ -30,10 +30,14 @@ namespace ContactCenterPOC.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetCallHistory()
+        public async Task<IActionResult> GetCallHistory([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
-            var history = await _callHistoryService.GetAllAsync();
-            return Ok(history);
+            if (page < 1) page = 1;
+            if (pageSize < 1) pageSize = 1;
+            if (pageSize > 100) pageSize = 100;
+
+            var result = await _callHistoryService.GetPagedAsync(page, pageSize);
+            return Ok(result);
         }
 
         [HttpGet("{callConnectionId}")]

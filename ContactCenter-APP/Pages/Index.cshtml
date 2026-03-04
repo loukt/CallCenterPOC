@@ -7,6 +7,44 @@
 <!-- Hidden field for API base URL -->
 <input type="hidden" id="apiBaseUrl" value="@Model.ApiBaseUrl" />
 
+<!-- Settings Overlay -->
+<div class="settings-overlay d-none" id="settingsOverlay">
+    <div class="settings-panel">
+        <div class="settings-header">
+            <h5 class="settings-title">Settings</h5>
+            <button class="settings-close-btn" onclick="toggleSettingsOverlay()">&times;</button>
+        </div>
+        <div class="settings-body">
+            <div class="settings-group">
+                <label class="settings-label" for="settingsMaxCallTime">Max Call Time (minutes)</label>
+                <p class="settings-description">Maximum duration a call is allowed to run before being automatically ended.</p>
+                <input type="number" class="form-control form-control-sm settings-input" id="settingsMaxCallTime"
+                       min="0.5" max="30" step="0.5" value="2">
+            </div>
+            <div class="settings-group">
+                <label class="settings-label">Voice API</label>
+                <p class="settings-description">Select the voice API engine used for AI-powered calls.</p>
+                <div class="settings-radio-group">
+                    <label class="settings-radio-option active">
+                        <input type="radio" name="voiceApiMode" value="ChatGPT" checked>
+                        <span class="radio-label">ChatGPT Realtime</span>
+                        <span class="radio-badge active-badge">Active</span>
+                    </label>
+                    <label class="settings-radio-option disabled-option">
+                        <input type="radio" name="voiceApiMode" value="VoiceLive" disabled>
+                        <span class="radio-label">Voice Live</span>
+                        <span class="radio-badge coming-soon-badge">Coming Soon</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+        <div class="settings-footer">
+            <button class="btn btn-sm btn-outline-secondary" onclick="toggleSettingsOverlay()">Cancel</button>
+            <button class="btn btn-sm btn-primary" id="saveSettingsBtn" onclick="saveSettings()">Save Settings</button>
+        </div>
+    </div>
+</div>
+
 <div class="dashboard-container">
     <!-- ═══ LEFT PANEL: Campaigns & Call Setup ═══ -->
     <aside class="panel panel-left" id="panelLeft">
@@ -408,6 +446,10 @@
                             <div class="progress-bar bg-warning" id="energyBar" style="width: 0%">0%</div>
                         </div>
                     </div>
+                </div>
+                <div class="detail-section" id="callSummarySection" style="display:none;">
+                    <h6 class="detail-section-title">Call Summary</h6>
+                    <div class="call-summary-card" id="callSummaryText"></div>
                 </div>
                 <div class="detail-section">
                     <h6 class="detail-section-title">Transcript</h6>

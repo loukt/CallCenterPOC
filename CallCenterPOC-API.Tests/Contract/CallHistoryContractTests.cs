@@ -30,7 +30,7 @@ namespace CallCenterPOC_API.Tests.Contract
         }
 
         [Fact]
-        public async Task GetCallHistory_ShouldReturn200WithArray()
+        public async Task GetCallHistory_ShouldReturn200WithPaginatedResponse()
         {
             // Act
             var response = await _client.GetAsync("/api/CallHistory");
@@ -42,7 +42,12 @@ namespace CallCenterPOC_API.Tests.Contract
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
-            Assert.Equal(JsonValueKind.Array, root.ValueKind);
+            Assert.Equal(JsonValueKind.Object, root.ValueKind);
+            Assert.True(root.TryGetProperty("totalCount", out _), "Response should have 'totalCount'");
+            Assert.True(root.TryGetProperty("page", out _), "Response should have 'page'");
+            Assert.True(root.TryGetProperty("pageSize", out _), "Response should have 'pageSize'");
+            Assert.True(root.TryGetProperty("items", out var items), "Response should have 'items'");
+            Assert.Equal(JsonValueKind.Array, items.ValueKind);
         }
 
         [Fact]
@@ -68,10 +73,12 @@ namespace CallCenterPOC_API.Tests.Contract
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
-            Assert.Equal(JsonValueKind.Array, root.ValueKind);
+            Assert.Equal(JsonValueKind.Object, root.ValueKind);
+            Assert.True(root.TryGetProperty("items", out var items), "Response should have 'items'");
+            Assert.Equal(JsonValueKind.Array, items.ValueKind);
 
             // If there are any entries, validate schema
-            foreach (var entry in root.EnumerateArray())
+            foreach (var entry in items.EnumerateArray())
             {
                 Assert.True(entry.TryGetProperty("callConnectionId", out _), "Entry should have 'callConnectionId'");
                 Assert.True(entry.TryGetProperty("phoneNumber", out _), "Entry should have 'phoneNumber'");
@@ -89,6 +96,37 @@ namespace CallCenterPOC_API.Tests.Contract
 
             // Assert
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        }
+
+        [Fact]
+        public async Task GetCallHistory_WithPaginationParams_ShouldReturn200()
+        {
+            // Act
+            var response = await _client.GetAsync("/api/CallHistory?page=1&pageSize=5");
+
+            // Assert
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            Assert.Equal(1, root.GetProperty("page").GetInt32());
+            Assert.Equal(5, root.GetProperty("pageSize").GetInt32());
+        }
+
+        [Fact]
+        public async Task GetCallHistory_PageSizeCappedAt100()
+        {
+            // Act
+            var response = await _client.GetAsync("/api/CallHistory?pageSize=200");
+
+            // Assert
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            Assert.Equal(100, doc.RootElement.GetProperty("pageSize").GetInt32());
         }
     }
 }

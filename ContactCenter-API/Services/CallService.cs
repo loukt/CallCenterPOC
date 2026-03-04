@@ -25,6 +25,8 @@ namespace ContactCenterPOC.Services
         private readonly SentimentAnalysisService? _sentimentService;
         private readonly EmotionAnalysisService? _emotionService;
         private readonly OperatorStyleAnalysisService? _operatorStyleService;
+        private readonly CallSummaryService? _callSummaryService;
+        private readonly SettingsService? _settingsService;
 
         // Thread-safe dictionaries for concurrent call handling
         private readonly ConcurrentDictionary<string, ActiveCall> _activeCalls = new();
@@ -32,7 +34,7 @@ namespace ContactCenterPOC.Services
 
         public ConcurrentDictionary<string, ActiveCall> ActiveCalls => _activeCalls;
 
-        public CallService(IConfiguration configuration, ILogger<CallService> logger, IHubContext<TranscriptHub> hubContext, CampaignService campaignService, CallHistoryService callHistoryService, SentimentAnalysisService? sentimentService = null, EmotionAnalysisService? emotionService = null, OperatorStyleAnalysisService? operatorStyleService = null)
+        public CallService(IConfiguration configuration, ILogger<CallService> logger, IHubContext<TranscriptHub> hubContext, CampaignService campaignService, CallHistoryService callHistoryService, SentimentAnalysisService? sentimentService = null, EmotionAnalysisService? emotionService = null, OperatorStyleAnalysisService? operatorStyleService = null, CallSummaryService? callSummaryService = null, SettingsService? settingsService = null)
         {
             _logger = logger;
             _configuration = configuration;
@@ -42,6 +44,8 @@ namespace ContactCenterPOC.Services
             _sentimentService = sentimentService;
             _emotionService = emotionService;
             _operatorStyleService = operatorStyleService;
+            _callSummaryService = callSummaryService;
+            _settingsService = settingsService;
             var connectionString = configuration["AzureCommunicationServices:ConnectionString"];
             _callbackUri = configuration["CallbackUrl"] ?? throw new InvalidOperationException("CallbackUrl not configured");
             _callAutomationClient = new CallAutomationClient(connectionString);
@@ -153,11 +157,24 @@ namespace ContactCenterPOC.Services
                     StartedAt = DateTimeOffset.UtcNow
                 };
 
-                // Set up 5-minute auto-terminate timeout
-                activeCall.CancellationTokenSource.CancelAfter(TimeSpan.FromMinutes(5));
+                // Set up auto-terminate timeout from settings (default 2 minutes)
+                var maxCallMinutes = 2.0;
+                if (_settingsService != null)
+                {
+                    try
+                    {
+                        var settings = await _settingsService.GetSettingsAsync();
+                        maxCallMinutes = settings.MaxCallTimeMinutes;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to load settings for max call time, using default {Default}min", maxCallMinutes);
+                    }
+                }
+                activeCall.CancellationTokenSource.CancelAfter(TimeSpan.FromMinutes(maxCallMinutes));
                 activeCall.CancellationTokenSource.Token.Register(async () =>
                 {
-                    _logger.LogInformation("Call {CallConnectionId} auto-terminated after 5 minutes", callConnectionId);
+                    _logger.LogInformation("Call {CallConnectionId} auto-terminated after {MaxMinutes} minutes", callConnectionId, maxCallMinutes);
                     await HangUpCall(callConnectionId);
                 });
 
@@ -343,6 +360,29 @@ namespace ContactCenterPOC.Services
                 };
 
                 await _callHistoryService.SaveCallRecordAsync(callRecord);
+
+                // Fire-and-forget: generate post-call summary in the background
+                if (_callSummaryService != null && entries.Count > 0)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var summary = await _callSummaryService.GenerateSummaryAsync(entries);
+                            if (!string.IsNullOrWhiteSpace(summary))
+                            {
+                                callRecord.CallSummary = summary;
+                                callRecord.SummarizedAt = DateTimeOffset.UtcNow;
+                                await _callHistoryService.SaveCallRecordAsync(callRecord);
+                                _logger.LogInformation("Post-call summary generated for {CallConnectionId}", activeCall.CallConnectionId);
+                            }
+                        }
+                        catch (Exception summaryEx)
+                        {
+                            _logger.LogWarning(summaryEx, "Failed to generate post-call summary for {CallConnectionId}", activeCall.CallConnectionId);
+                        }
+                    });
+                }
             }
             catch (Exception ex)
             {

@@ -480,3 +480,73 @@ The web application is redesigned as a professional, enterprise-grade call opera
 - **SC-026**: During a live call, both emotion graphs update within 1 second after a new transcript segment is received.
 - **SC-027**: For a completed call, historical detail renders both speaker emotion timelines and operator style traits within 3 seconds of selection.
 - **SC-028**: When emotion analysis is unavailable, the system continues to stream transcripts and sentiment, and emotion defaults to Neutral with confidence 0 without UI breakage.
+
+---
+
+## Phase 33 Additions
+
+### Session 2026-03-04
+
+- Q: Should there be a settings page accessible from the dashboard? → A: Yes. A gear icon in the header that opens an overlay settings panel with configurable options.
+- Q: What should the max call time default be? → A: 2 minutes (changed from the original 5-minute default). The operator should be able to adjust this from the settings page.
+- Q: Should there be a Voice API selector? → A: Yes. Currently using ChatGPT Realtime API. A future option for Azure Voice Live should appear as a placeholder in settings.
+- Q: Should call history support pagination? → A: Yes. The `GET /api/CallHistory` endpoint should support pagination to avoid loading all records at once as history grows.
+- Q: Should Swagger be accessible in production? → A: No. Re-enable the development-only Swagger guard that was commented out during debugging.
+- Q: Should there be a health check endpoint? → A: Yes. A simple `/healthz` endpoint for monitoring and load balancer probes.
+- Q: Should common analysis service code be refactored? → A: Yes. `SentimentAnalysisService`, `EmotionAnalysisService`, and `OperatorStyleAnalysisService` share ~200 lines of duplicate Azure OpenAI HTTP/auth code that should be extracted into a shared base class.
+- Q: Should the system generate a post-call summary? → A: Yes. After a call ends, generate a brief AI-powered summary of the conversation and persist it in the call history record.
+
+### User Story 13: Operator Settings & Configuration (Priority: P2)
+
+**As an** operator,
+**I want to** access a settings panel from the dashboard header,
+**so that** I can configure call behavior (max duration, voice API) without modifying code or configuration files.
+
+#### Acceptance Scenarios
+
+| # | Given | When | Then |
+|---|-------|------|------|
+| 1 | The operator is on the dashboard | They click the gear icon in the header | A settings overlay panel slides in from the right, dimming the background |
+| 2 | The settings overlay is open | The operator adjusts the max call time slider/input | The value updates in real time and is persisted to the API |
+| 3 | The operator sets max call time to 3 minutes | They initiate a call | The call auto-terminates after 3 minutes instead of the default 2 |
+| 4 | The settings overlay shows Voice API selector | The operator sees "ChatGPT Realtime" selected | "Voice Live" option appears but is disabled/greyed out with a "Coming Soon" badge |
+| 5 | The operator closes the settings overlay | They click the X button or click outside the overlay | The overlay closes and the dashboard is fully interactive again |
+| 6 | The operator changed settings and refreshes the page | The page reloads | Settings are restored from the API (persisted server-side) |
+
+### User Story 14: Post-Call Summary Generation (Priority: P3)
+
+**As an** operator,
+**I want to** see an AI-generated summary of each completed call,
+**so that** I can quickly understand the outcome without reading the full transcript.
+
+#### Acceptance Scenarios
+
+| # | Given | When | Then |
+|---|-------|------|------|
+| 1 | A call has just ended with transcript entries | The system processes the disconnect | An AI-generated summary (2-4 sentences) is created and persisted to the call record |
+| 2 | The operator views a historical call with a summary | They open the call detail | The summary is displayed prominently above the transcript |
+| 3 | Summary generation fails (model error/timeout) | The call disconnect is processed | The call record is saved without a summary; no error is shown to the operator |
+
+### Updates to FR-016
+
+**FR-016 (Updated)**: The system MUST enforce a configurable maximum call duration. The default is **2 minutes** (changed from 5 minutes). The max call time is configurable via the settings API and persists across sessions. When the limit is reached, the system MUST automatically terminate the call, stop recording, and clean up resources.
+
+### Additional Functional Requirements
+
+- **FR-060**: The dashboard header MUST include a gear icon that opens a settings overlay panel.
+- **FR-061**: The settings overlay MUST include a "Max Call Time" control (slider or numeric input) with a default of 2 minutes, minimum of 1 minute, and maximum of 10 minutes. Changes MUST be persisted via an API endpoint.
+- **FR-062**: The settings overlay MUST include a "Voice API" selector showing "ChatGPT Realtime" (active) and "Voice Live" (disabled, coming soon).
+- **FR-063**: The API MUST expose a `GET /healthz` health check endpoint that returns 200 OK with basic service status.
+- **FR-064**: The `GET /api/CallHistory` endpoint MUST support pagination via `page` and `pageSize` query parameters (default page=1, pageSize=20). The response MUST include `totalCount`, `page`, `pageSize`, and `items` array.
+- **FR-065**: The API MUST expose `GET /api/Settings` and `PUT /api/Settings` endpoints for reading and updating operator settings (max call time, voice API preference). Settings MUST persist to Blob Storage.
+- **FR-066**: After a call ends, the system MUST generate a brief AI-powered summary (2-4 sentences) from the transcript and persist it as `CallSummary` in the `CallRecord`.
+- **FR-067**: The `SentimentAnalysisService`, `EmotionAnalysisService`, and `OperatorStyleAnalysisService` MUST share a common base class for Azure OpenAI HTTP communication, authentication, and retry logic to eliminate code duplication.
+- **FR-068**: Swagger UI MUST only be accessible in the Development environment (re-enable the production guard).
+
+### Additional Success Criteria
+
+- **SC-029**: The settings overlay opens within 300ms of clicking the gear icon and closes within 300ms.
+- **SC-030**: After changing max call time in settings, new calls respect the updated duration limit.
+- **SC-031**: The `/healthz` endpoint responds within 100ms with a 200 status.
+- **SC-032**: Call history pagination loads the first page within 2 seconds, even with 100+ historical calls.
+- **SC-033**: Post-call summary is generated and visible in call detail within 10 seconds of call disconnect.

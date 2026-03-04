@@ -126,6 +126,33 @@ namespace ContactCenterPOC.Services
             }
         }
 
+        public async Task<PagedResult<CallHistorySummary>> GetPagedAsync(int page = 1, int pageSize = 20)
+        {
+            await EnsureCacheLoadedAsync();
+
+            await _cacheLock.WaitAsync();
+            try
+            {
+                var totalCount = _summaryCache.Count;
+                var items = _summaryCache
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+
+                return new PagedResult<CallHistorySummary>
+                {
+                    TotalCount = totalCount,
+                    Page = page,
+                    PageSize = pageSize,
+                    Items = items
+                };
+            }
+            finally
+            {
+                _cacheLock.Release();
+            }
+        }
+
         public async Task<CallRecord?> GetByIdAsync(string callConnectionId)
         {
             try

@@ -78,6 +78,8 @@ builder.Services.AddSingleton<CampaignService>();
 builder.Services.AddSingleton<SentimentAnalysisService>();
 builder.Services.AddSingleton<EmotionAnalysisService>();
 builder.Services.AddSingleton<OperatorStyleAnalysisService>();
+builder.Services.AddSingleton<CallSummaryService>();
+builder.Services.AddSingleton<SettingsService>();
 builder.Services.AddSingleton<CallHistoryService>();
 builder.Services.AddHttpClient("AzureOpenAITranscription", client =>
 {
@@ -134,11 +136,11 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-//if (app.Environment.IsDevelopment())
-//{
+if (app.Environment.IsDevelopment())
+{
     app.UseSwagger();
     app.UseSwaggerUI();
-//}
+}
 
 app.UseWebSockets();
 
@@ -152,6 +154,9 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<TranscriptHub>("/transcriptHub");
+
+// Health check endpoint for load balancer probes and monitoring
+app.MapGet("/healthz", () => Results.Ok(new { status = "healthy", timestamp = DateTimeOffset.UtcNow }));
 
 app.Run();
 
