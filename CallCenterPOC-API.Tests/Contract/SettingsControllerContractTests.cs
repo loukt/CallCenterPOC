@@ -129,5 +129,60 @@ namespace CallCenterPOC_API.Tests.Contract
             using var doc = JsonDocument.Parse(json);
             Assert.Equal("ChatGPT", doc.RootElement.GetProperty("voiceApiMode").GetString());
         }
+
+        [Fact]
+        public async Task GetSettings_ShouldReturnSelectedVoiceField()
+        {
+            // Act
+            var response = await _client.GetAsync("/api/Settings");
+
+            // Assert
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            Assert.True(doc.RootElement.TryGetProperty("selectedVoice", out var voice), "Should have 'selectedVoice'");
+            Assert.Equal("alloy", voice.GetString());
+        }
+
+        [Fact]
+        public async Task PutSettings_WithValidVoice_ShouldReturn200()
+        {
+            // Arrange
+            var content = new StringContent(
+                JsonSerializer.Serialize(new { maxCallTimeMinutes = 2.0, voiceApiMode = "ChatGPT", selectedVoice = "nova" }),
+                System.Text.Encoding.UTF8);
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+
+            // Act
+            var response = await _client.PutAsync("/api/Settings", content);
+
+            // Assert
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            Assert.Equal("nova", doc.RootElement.GetProperty("selectedVoice").GetString());
+        }
+
+        [Fact]
+        public async Task PutSettings_WithInvalidVoice_DefaultsToAlloy()
+        {
+            // Arrange
+            var content = new StringContent(
+                JsonSerializer.Serialize(new { maxCallTimeMinutes = 2.0, voiceApiMode = "ChatGPT", selectedVoice = "invalid-voice" }),
+                System.Text.Encoding.UTF8);
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+
+            // Act
+            var response = await _client.PutAsync("/api/Settings", content);
+
+            // Assert
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            Assert.Equal("alloy", doc.RootElement.GetProperty("selectedVoice").GetString());
+        }
     }
 }

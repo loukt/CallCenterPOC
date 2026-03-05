@@ -1,9 +1,9 @@
-﻿# Tasks: Outbound Call Center POC
+# Tasks: Outbound Call Center POC
 
 **Input**: Design documents from `/specs/001-outbound-callcenter-poc/`  
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/api.yaml, quickstart.md
 
-**Tests**: Included â€” Constitution Principle V requires unit tests for validation logic and contract tests for HTTP endpoints.
+**Tests**: Included Ã¢â‚¬â€ Constitution Principle V requires unit tests for validation logic and contract tests for HTTP endpoints.
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
@@ -26,25 +26,25 @@
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-**Purpose**: Core data models, thread-safe refactoring, SignalR hub, and CORS â€” MUST be complete before any user story work begins
+**Purpose**: Core data models, thread-safe refactoring, SignalR hub, and CORS Ã¢â‚¬â€ MUST be complete before any user story work begins
 
-**âš ï¸ CRITICAL**: No user story work can begin until this phase is complete
+**Ã¢Å¡Â Ã¯Â¸Â CRITICAL**: No user story work can begin until this phase is complete
 
-- [x] T003 [P] Define `CallStatus` enum (`Initiating`, `Ringing`, `Connected`, `Disconnected`) and `ActiveCall` class (`CallConnectionId`, `ServerCallId?`, `TargetPhoneNumber`, `Prompt`, `Status`, `StartedAt`, `RecordingId?`, `CancellationTokenSource`) in `ContactCenter-API/Models/ActiveCall.cs` per data-model.md Â§2. Note: `ServerCallId` is `string?` â€” null until the `CallConnected` event populates it (see T013).
-- [x] T004 [P] Define `TranscriptEntry` class (`CallConnectionId`, `Speaker`, `Text`, `Timestamp`) and `SpeakerType` enum (`AI`, `Recipient`) in `ContactCenter-API/Models/TranscriptEntry.cs` per data-model.md Â§4
-- [x] T005 [P] Define `CallStatusUpdate` class (`CallConnectionId`, `Status`, `Message?`, `Timestamp`) in `ContactCenter-API/Models/CallStatusUpdate.cs` per data-model.md Â§5
-- [x] T006 Refactor `CallService` in `ContactCenter-API/Services/CallService.cs`: replace the four separate `Dictionary` fields (`_activeConnections`, `_activeCallPrompt`, `_activeCallNumbers`, `_activeRecordings`) and the single `_acsMediaStreamingHandler` field with a single `ConcurrentDictionary<string, ActiveCall>` and a `ConcurrentDictionary<string, AcsMediaStreamingHandler>` keyed by `callConnectionId`. Update all methods to use the new dictionaries. This fixes the thread-safety issue identified in research.md Â§2.
-- [x] T007 [P] Create `TranscriptHub` SignalR hub class in `ContactCenter-API/Hubs/TranscriptHub.cs`. The hub should support client group join/leave by `callConnectionId` (so the frontend subscribes to updates for a specific call). Define methods: `JoinCall(string callConnectionId)`, `LeaveCall(string callConnectionId)`. Server-to-client events: `TranscriptUpdate(TranscriptEntry)`, `CallStatusChanged(CallStatusUpdate)`. Per research.md Â§4.
+- [x] T003 [P] Define `CallStatus` enum (`Initiating`, `Ringing`, `Connected`, `Disconnected`) and `ActiveCall` class (`CallConnectionId`, `ServerCallId?`, `TargetPhoneNumber`, `Prompt`, `Status`, `StartedAt`, `RecordingId?`, `CancellationTokenSource`) in `ContactCenter-API/Models/ActiveCall.cs` per data-model.md Ã‚Â§2. Note: `ServerCallId` is `string?` Ã¢â‚¬â€ null until the `CallConnected` event populates it (see T013).
+- [x] T004 [P] Define `TranscriptEntry` class (`CallConnectionId`, `Speaker`, `Text`, `Timestamp`) and `SpeakerType` enum (`AI`, `Recipient`) in `ContactCenter-API/Models/TranscriptEntry.cs` per data-model.md Ã‚Â§4
+- [x] T005 [P] Define `CallStatusUpdate` class (`CallConnectionId`, `Status`, `Message?`, `Timestamp`) in `ContactCenter-API/Models/CallStatusUpdate.cs` per data-model.md Ã‚Â§5
+- [x] T006 Refactor `CallService` in `ContactCenter-API/Services/CallService.cs`: replace the four separate `Dictionary` fields (`_activeConnections`, `_activeCallPrompt`, `_activeCallNumbers`, `_activeRecordings`) and the single `_acsMediaStreamingHandler` field with a single `ConcurrentDictionary<string, ActiveCall>` and a `ConcurrentDictionary<string, AcsMediaStreamingHandler>` keyed by `callConnectionId`. Update all methods to use the new dictionaries. This fixes the thread-safety issue identified in research.md Ã‚Â§2.
+- [x] T007 [P] Create `TranscriptHub` SignalR hub class in `ContactCenter-API/Hubs/TranscriptHub.cs`. The hub should support client group join/leave by `callConnectionId` (so the frontend subscribes to updates for a specific call). Define methods: `JoinCall(string callConnectionId)`, `LeaveCall(string callConnectionId)`. Server-to-client events: `TranscriptUpdate(TranscriptEntry)`, `CallStatusChanged(CallStatusUpdate)`. Per research.md Ã‚Â§4.
 - [x] T008 Register SignalR services, CORS policy, and map the `/transcriptHub` endpoint in `ContactCenter-API/Program.cs`. Add `builder.Services.AddSignalR()`, `builder.Services.AddCors(...)` allowing the origin from the `FrontendOrigin` config key (e.g., `https://localhost:5002`), `app.UseCors(...)`, and `app.MapHub<TranscriptHub>("/transcriptHub")`. The CORS policy must include `.AllowCredentials()` so SignalR can use its WebSocket transport instead of falling back to long-polling.
-- [x] T009 [P] Fix WebSocket receive buffer in `ContactCenter-API/Models/acsMediaStreamingHandler.cs`: increase from 2048 bytes to 4096 bytes and implement proper message reassembly by checking `receiveResult.EndOfMessage` before processing. Per research.md Â§2.
+- [x] T009 [P] Fix WebSocket receive buffer in `ContactCenter-API/Models/acsMediaStreamingHandler.cs`: increase from 2048 bytes to 4096 bytes and implement proper message reassembly by checking `receiveResult.EndOfMessage` before processing. Per research.md Ã‚Â§2.
 
-**Checkpoint**: Foundation ready â€” thread-safe CallService, data models, SignalR hub, and CORS all in place. User story implementation can now begin.
+**Checkpoint**: Foundation ready Ã¢â‚¬â€ thread-safe CallService, data models, SignalR hub, and CORS all in place. User story implementation can now begin.
 
 ---
 
-## Phase 3: User Story 3 â€” Real-Time Bidirectional Voice Conversation (Priority: P1)
+## Phase 3: User Story 3 Ã¢â‚¬â€ Real-Time Bidirectional Voice Conversation (Priority: P1)
 
-**Goal**: Extract live transcript from the AI session and stream it to the operator via SignalR. The existing bidirectional audio bridge and barge-in already work â€” this phase adds transcript visibility.
+**Goal**: Extract live transcript from the AI session and stream it to the operator via SignalR. The existing bidirectional audio bridge and barge-in already work Ã¢â‚¬â€ this phase adds transcript visibility.
 
 **Independent Test**: Place a call, speak to the AI, verify transcript entries appear on the connected SignalR client for both AI and recipient speech, and confirm barge-in still works.
 
@@ -53,13 +53,13 @@
 - [x] T010 [US3] Refactor `AcsMediaStreamingHandler` constructor in `ContactCenter-API/Models/acsMediaStreamingHandler.cs` to accept `IHubContext<TranscriptHub>` and the `callConnectionId`. Store both as fields. The hub context will be used to push transcript entries.
 - [x] T011 [US3] Refactor `AzureOpenAIService` in `ContactCenter-API/Services/AzureOpenAIService.cs` to accept `IHubContext<TranscriptHub>` and `callConnectionId`. In `GetOpenAiStreamResponseAsync()`: on `ConversationItemStreamingAudioTranscriptionFinishedUpdate`, create a `TranscriptEntry` with `Speaker = SpeakerType.AI` and send it via `hubContext.Clients.Group(callConnectionId).SendAsync("TranscriptUpdate", entry)`. On `ConversationInputTranscriptionFinishedUpdate`, create a `TranscriptEntry` with `Speaker = SpeakerType.Recipient` and send similarly.
 - [x] T012 [US3] Update `CallService.StartCallInteraction()` in `ContactCenter-API/Services/CallService.cs` to pass `IHubContext<TranscriptHub>` and `callConnectionId` through to `AcsMediaStreamingHandler` and `AzureOpenAIService`. Inject `IHubContext<TranscriptHub>` into `CallService` constructor.
-- [x] T013 [US3] Push `CallStatusUpdate` via SignalR in `CallbackController.CallbackEvent()` in `ContactCenter-API/Controllers/CallbackController.cs`: on `CallConnected` â†’ send status `Connected`, and also update the `ActiveCall` entry's `ServerCallId` from `@event.ServerCallId` (needed for recording in T028); on `CallDisconnected` â†’ send status `Disconnected`. Inject `IHubContext<TranscriptHub>` into `CallbackController`.
+- [x] T013 [US3] Push `CallStatusUpdate` via SignalR in `CallbackController.CallbackEvent()` in `ContactCenter-API/Controllers/CallbackController.cs`: on `CallConnected` Ã¢â€ â€™ send status `Connected`, and also update the `ActiveCall` entry's `ServerCallId` from `@event.ServerCallId` (needed for recording in T028); on `CallDisconnected` Ã¢â€ â€™ send status `Disconnected`. Inject `IHubContext<TranscriptHub>` into `CallbackController`.
 
-**Checkpoint**: At this point, the AI-powered bidirectional voice conversation works and transcript + status updates are streamed via SignalR. No frontend consumption yet â€” that comes in US1.
+**Checkpoint**: At this point, the AI-powered bidirectional voice conversation works and transcript + status updates are streamed via SignalR. No frontend consumption yet Ã¢â‚¬â€ that comes in US1.
 
 ---
 
-## Phase 4: User Story 1 â€” Initiate an Outbound AI Call (Priority: P1) ðŸŽ¯ MVP
+## Phase 4: User Story 1 Ã¢â‚¬â€ Initiate an Outbound AI Call (Priority: P1) Ã°Å¸Å½Â¯ MVP
 
 **Goal**: Operator can initiate a validated call, see live status + transcript, hang up, and the system enforces concurrent/duration limits.
 
@@ -69,15 +69,15 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [x] T014 [P] [US1] Write `PhoneNumberValidationTests` in `CallCenterPOC-API.Tests/Unit/PhoneNumberValidationTests.cs`: test E.164 validation â€” valid numbers (`+6591234567`, `+14155551234`), invalid numbers (`6591234567`, `+0123`, `abc`, empty string, null). Validate against the `[RegularExpression]` attribute on `CallRequest.PhoneNumber`.
+- [x] T014 [P] [US1] Write `PhoneNumberValidationTests` in `CallCenterPOC-API.Tests/Unit/PhoneNumberValidationTests.cs`: test E.164 validation Ã¢â‚¬â€ valid numbers (`+6591234567`, `+14155551234`), invalid numbers (`6591234567`, `+0123`, `abc`, empty string, null). Validate against the `[RegularExpression]` attribute on `CallRequest.PhoneNumber`.
 - [x] T015 [P] [US1] Write `ConcurrentCallLimitTests` in `CallCenterPOC-API.Tests/Unit/ConcurrentCallLimitTests.cs`: test that `CallService` rejects the 6th concurrent call. Mock `CallAutomationClient`. Add 5 entries to the `ConcurrentDictionary<string, ActiveCall>`, then verify `InitiateCall` throws or returns an error.
-- [x] T016 [P] [US1] Write `CallControllerContractTests` in `CallCenterPOC-API.Tests/Contract/CallControllerContractTests.cs`: use `WebApplicationFactory<Program>` to test: (a) `POST /api/Call/initiate` with invalid phone â†’ 400, (b) `POST /api/Call/initiate` with missing body â†’ 400, (c) `GET /api/Call/active` â†’ 200 with expected JSON shape, (d) `POST /api/Call/hangup/nonexistent` â†’ 404.
+- [x] T016 [P] [US1] Write `CallControllerContractTests` in `CallCenterPOC-API.Tests/Contract/CallControllerContractTests.cs`: use `WebApplicationFactory<Program>` to test: (a) `POST /api/Call/initiate` with invalid phone Ã¢â€ â€™ 400, (b) `POST /api/Call/initiate` with missing body Ã¢â€ â€™ 400, (c) `GET /api/Call/active` Ã¢â€ â€™ 200 with expected JSON shape, (d) `POST /api/Call/hangup/nonexistent` Ã¢â€ â€™ 404.
 
 ### Implementation for User Story 1
 
 - [x] T017 [US1] Add `[Required]` and `[RegularExpression(@"^\+[1-9]\d{1,14}$")]` validation attributes to `CallRequest.PhoneNumber` in `ContactCenter-API/Models/CallbackEventModels.cs`. Add `[JsonProperty]` for consistent casing. This implements FR-002.
 - [x] T018 [US1] Add concurrent call limit check to `CallService.InitiateCall()` in `ContactCenter-API/Services/CallService.cs`: if `_activeCalls.Count >= 5`, throw an `InvalidOperationException` or return a result indicating the limit is reached. This implements FR-017.
-- [x] T019 [US1] Add per-call 5-minute timeout in `CallService.InitiateCall()` in `ContactCenter-API/Services/CallService.cs`: create a `CancellationTokenSource`, call `cts.CancelAfter(TimeSpan.FromMinutes(5))`, store it on the `ActiveCall`, and register `cts.Token.Register(async () => { await HangUpCall(callConnectionId); })` to auto-terminate. This implements FR-016. Per research.md Â§5.
+- [x] T019 [US1] Add per-call 5-minute timeout in `CallService.InitiateCall()` in `ContactCenter-API/Services/CallService.cs`: create a `CancellationTokenSource`, call `cts.CancelAfter(TimeSpan.FromMinutes(5))`, store it on the `ActiveCall`, and register `cts.Token.Register(async () => { await HangUpCall(callConnectionId); })` to auto-terminate. This implements FR-016. Per research.md Ã‚Â§5.
 - [x] T020 [P] [US1] Implement `POST /api/Call/hangup/{callConnectionId}` action in `ContactCenter-API/Controllers/CallController.cs`: look up the active call, call `CallConnection.HangUpAsync(forEveryone: true)`, stop recording, clean up resources, return 200. Return 404 if call not found. Per contracts/api.yaml. This implements FR-015.
 - [x] T021 [P] [US1] Implement `GET /api/Call/active` action in `ContactCenter-API/Controllers/CallController.cs`: return `ActiveCallsResponse` with count, maxConcurrent (5), and list of `ActiveCallSummary` objects from the `ConcurrentDictionary`. Per contracts/api.yaml.
 - [x] T022 [US1] Update `POST /api/Call/initiate` in `ContactCenter-API/Controllers/CallController.cs`: add `ModelState` validation (return 400 with `ErrorResponse` for invalid input), catch concurrent limit exceeded (return 429 with `ErrorResponse`), and return structured `CallInitiatedResponse` with `callConnectionId` (not `callId`) per contracts/api.yaml. Also update existing code's anonymous response object from `CallId` to `CallConnectionId` for consistency. This implements FR-012.
@@ -89,7 +89,7 @@
 
 ---
 
-## Phase 5: User Story 2 â€” Select a Pre-Defined Prompt Scenario (Priority: P2)
+## Phase 5: User Story 2 Ã¢â‚¬â€ Select a Pre-Defined Prompt Scenario (Priority: P2)
 
 **Goal**: Pre-defined prompt scenarios work correctly with visual selection state, and empty prompts fall back to a default.
 
@@ -104,7 +104,7 @@
 
 ---
 
-## Phase 6: User Story 4 â€” Call Recording (Priority: P3)
+## Phase 6: User Story 4 Ã¢â‚¬â€ Call Recording (Priority: P3)
 
 **Goal**: Call recordings are automatically started on connect and stopped on disconnect, with thread-safe tracking.
 
@@ -123,9 +123,9 @@
 
 **Purpose**: Code quality, observability, and cleanup
 
-- [x] T030 [P] Add structured logging with `callConnectionId` correlation to all call lifecycle log messages in `ContactCenter-API/Services/CallService.cs` and `ContactCenter-API/Controllers/CallbackController.cs`. Use `_logger.LogInformation("Call {CallConnectionId} ...")` pattern. Phone numbers are logged unmasked (justified for POC â€” see plan.md Complexity Tracking). This implements FR-013.
-- [x] T031 [P] Remove unused `StartCallInteractionToPlaySound()` and `HandlePlaybackCompleted()` methods from `ContactCenter-API/Services/CallService.cs`, and corresponding `HandlePlaybackCompleted` in `CallbackController.cs`. These use the blocking `WaitForEventProcessorAsync()` pattern identified as problematic in research.md Â§2.
-- [x] T032 [P] Remove unused `HandleCallConnected` method from `ContactCenter-API/Controllers/CallbackController.cs` (dead code â€” never called).
+- [x] T030 [P] Add structured logging with `callConnectionId` correlation to all call lifecycle log messages in `ContactCenter-API/Services/CallService.cs` and `ContactCenter-API/Controllers/CallbackController.cs`. Use `_logger.LogInformation("Call {CallConnectionId} ...")` pattern. Phone numbers are logged unmasked (justified for POC Ã¢â‚¬â€ see plan.md Complexity Tracking). This implements FR-013.
+- [x] T031 [P] Remove unused `StartCallInteractionToPlaySound()` and `HandlePlaybackCompleted()` methods from `ContactCenter-API/Services/CallService.cs`, and corresponding `HandlePlaybackCompleted` in `CallbackController.cs`. These use the blocking `WaitForEventProcessorAsync()` pattern identified as problematic in research.md Ã‚Â§2.
+- [x] T032 [P] Remove unused `HandleCallConnected` method from `ContactCenter-API/Controllers/CallbackController.cs` (dead code Ã¢â‚¬â€ never called).
 - [x] T033 [P] Update `TestController` in `ContactCenter-API/Controllers/TestController.cs`: either apply the same E.164 phone validation (FR-002) and concurrent call limit check (FR-017) as `CallController.InitiateCall`, or add a `#if DEBUG` / `[ApiExplorerSettings(IgnoreApi = true)]` guard so it cannot be called in non-development environments. The current implementation bypasses all validation.
 - [x] T034 [P] [US3] Add graceful call termination on AI failure in `ContactCenter-API/Services/AzureOpenAIService.cs`: on `ConversationErrorUpdate` and in the catch blocks of `GetOpenAiStreamResponseAsync()`, call back to `CallService.HangUpCall(callConnectionId)` to terminate the ACS call instead of leaving a silent open line. Pass a `Func<string, Task>` or `Action<string>` hang-up callback into `AzureOpenAIService` constructor to avoid circular dependency. This addresses spec edge case "AI service unavailable or error mid-call."
 - [x] T035 [P] [US3] Add graceful call termination on WebSocket drop in `ContactCenter-API/Models/acsMediaStreamingHandler.cs`: in the `finally` block of `ProcessWebSocketAsync()`, call back to `CallService.HangUpCall(callConnectionId)` to terminate the ACS call and clean up resources (stop recording, close AI session). Pass a hang-up callback into the handler constructor. This addresses spec edge case "WebSocket connection drops during a call."
@@ -141,8 +141,8 @@
 
 ### Models & Persistence
 
-- [x] T037 [US2] Define `Campaign` model class in `ContactCenter-API/Models/Campaign.cs` with fields: `Id` (string, GUID), `Title` (string, required), `Description` (string, required), `AiBehaviorInstructions` (string, required), `IsDefault` (bool), `CreatedAt` (DateTimeOffset). Add validation attributes. Per data-model.md Â§3.
-- [x] T038 [P] [US2] Define `CreateCampaignRequest` DTO in `ContactCenter-API/Models/Campaign.cs` with fields: `Title`, `Description`, `AiBehaviorInstructions` â€” all required with validation attributes. Per contracts/api.yaml `CreateCampaignRequest` schema.
+- [x] T037 [US2] Define `Campaign` model class in `ContactCenter-API/Models/Campaign.cs` with fields: `Id` (string, GUID), `Title` (string, required), `Description` (string, required), `AiBehaviorInstructions` (string, required), `IsDefault` (bool), `CreatedAt` (DateTimeOffset). Add validation attributes. Per data-model.md Ã‚Â§3.
+- [x] T038 [P] [US2] Define `CreateCampaignRequest` DTO in `ContactCenter-API/Models/Campaign.cs` with fields: `Title`, `Description`, `AiBehaviorInstructions` Ã¢â‚¬â€ all required with validation attributes. Per contracts/api.yaml `CreateCampaignRequest` schema.
 
 ### Tests (Write First)
 
@@ -151,7 +151,7 @@
 
 ### Service & Controller
 
-- [x] T041 [US2] Implement `CampaignService` in `ContactCenter-API/Services/CampaignService.cs`: load campaigns from Blob Storage (`campaigns.json`) on startup with 4 pre-defined defaults if file doesn't exist. Methods: `GetAllAsync()`, `GetByIdAsync(string id)`, `CreateAsync(CreateCampaignRequest)`. Write-through to Blob Storage on create. Validate title uniqueness. Use `Azure.Storage.Blobs.BlobServiceClient` injected via DI. Per data-model.md Â§3 and plan.md persistence strategy.
+- [x] T041 [US2] Implement `CampaignService` in `ContactCenter-API/Services/CampaignService.cs`: load campaigns from Blob Storage (`campaigns.json`) on startup with 4 pre-defined defaults if file doesn't exist. Methods: `GetAllAsync()`, `GetByIdAsync(string id)`, `CreateAsync(CreateCampaignRequest)`. Write-through to Blob Storage on create. Validate title uniqueness. Use `Azure.Storage.Blobs.BlobServiceClient` injected via DI. Per data-model.md Ã‚Â§3 and plan.md persistence strategy.
 - [x] T042 [US2] Implement `CampaignController` in `ContactCenter-API/Controllers/CampaignController.cs`: `GET /api/Campaign` returns all campaigns. `POST /api/Campaign` creates a new campaign (validates, returns 201 with created campaign or 400). Per contracts/api.yaml.
 - [x] T043 [US2] Add `Azure.Storage.Blobs` NuGet package to `ContactCenter-API/ContactCenter-API.csproj`. Register `BlobServiceClient` in `ContactCenter-API/Program.cs` DI using `DefaultAzureCredential` + storage account URI (consistent with existing Managed Identity auth pattern for Azure deployment). For local development, support a `BlobStorage:ConnectionString` config key as a fallback (if set, use connection string; otherwise, use `DefaultAzureCredential` with `BlobStorage:AccountUri`). Register `CampaignService` as singleton. Document both auth options in T078's quickstart update.
 
@@ -177,7 +177,7 @@
 
 ### Models
 
-- [x] T048 [US5] Define `SentimentResult` model in `ContactCenter-API/Models/SentimentResult.cs`: class with `Label` (SentimentLabel enum: Positive, Neutral, Negative) and `Confidence` (float). Add `SentimentLabel` enum in the same file. Per data-model.md Â§5.
+- [x] T048 [US5] Define `SentimentResult` model in `ContactCenter-API/Models/SentimentResult.cs`: class with `Label` (SentimentLabel enum: Positive, Neutral, Negative) and `Confidence` (float). Add `SentimentLabel` enum in the same file. Per data-model.md Ã‚Â§5.
 - [x] T049 [US5] Update `TranscriptEntry` in `ContactCenter-API/Models/TranscriptEntry.cs`: add `Sentiment` (SentimentResult) property. Default to `Neutral` with confidence 0 if sentiment analysis hasn't completed yet.
 
 ### Tests (Write First)
@@ -186,12 +186,12 @@
 
 ### Service
 
-- [x] T051 [US5] Implement `SentimentAnalysisService` in `ContactCenter-API/Services/SentimentAnalysisService.cs`: inject Azure OpenAI `ChatClient` using the same auth pattern as `AzureOpenAIService` (API key for local dev via `AzureOpenAI:Key`, `DefaultAzureCredential` for Azure deployment). Method: `Task<SentimentResult> AnalyzeAsync(string text)` â€” sends a chat completion request with a system prompt instructing the model to classify sentiment as Positive/Neutral/Negative and return a JSON object `{"label":"...","confidence":0.X}`. Parse the response. On error, return `Neutral` with confidence 0. Use a lightweight model (gpt-4o-mini or similar). Per spec.md assumptions.
+- [x] T051 [US5] Implement `SentimentAnalysisService` in `ContactCenter-API/Services/SentimentAnalysisService.cs`: inject Azure OpenAI `ChatClient` using the same auth pattern as `AzureOpenAIService` (API key for local dev via `AzureOpenAI:Key`, `DefaultAzureCredential` for Azure deployment). Method: `Task<SentimentResult> AnalyzeAsync(string text)` Ã¢â‚¬â€ sends a chat completion request with a system prompt instructing the model to classify sentiment as Positive/Neutral/Negative and return a JSON object `{"label":"...","confidence":0.X}`. Parse the response. On error, return `Neutral` with confidence 0. Use a lightweight model (gpt-4o-mini or similar). Per spec.md assumptions.
 - [x] T052 [US5] Register `SentimentAnalysisService` as singleton in `ContactCenter-API/Program.cs`. Configure the chat model deployment name via `AzureOpenAI:ChatDeployment` config key (may differ from the Realtime model).
 
 ### Integration
 
-- [x] T053 [US5] Update `AzureOpenAIService.GetOpenAiStreamResponseAsync()` in `ContactCenter-API/Services/AzureOpenAIService.cs`: after creating a `TranscriptEntry` (for both AI and Recipient transcripts), call `SentimentAnalysisService.AnalyzeAsync(entry.Text)` and attach the result to `entry.Sentiment` before sending via SignalR. Use `Task.Run()` or fire-and-forget to avoid blocking the audio pipeline â€” send the transcript immediately, then update sentiment via a follow-up SignalR event if needed.
+- [x] T053 [US5] Update `AzureOpenAIService.GetOpenAiStreamResponseAsync()` in `ContactCenter-API/Services/AzureOpenAIService.cs`: after creating a `TranscriptEntry` (for both AI and Recipient transcripts), call `SentimentAnalysisService.AnalyzeAsync(entry.Text)` and attach the result to `entry.Sentiment` before sending via SignalR. Use `Task.Run()` or fire-and-forget to avoid blocking the audio pipeline Ã¢â‚¬â€ send the transcript immediately, then update sentiment via a follow-up SignalR event if needed.
 - [x] T054 [US5] Add a new SignalR server-to-client event `SentimentUpdate` in the TranscriptHub: sends `{ callConnectionId, entryTimestamp, sentiment }` so the frontend can update an already-rendered transcript entry with its sentiment badge asynchronously (avoids blocking transcript delivery on sentiment analysis).
 
 ### Frontend
@@ -207,18 +207,18 @@
 
 **Purpose**: Support initiating up to 2 simultaneous calls in a single action. Each call is independent with its own AI session, transcript, and call panel.
 
-**Independent Test**: Enter 2 phone numbers, click "Make a Call," answer both phones, verify each has an independent AI conversation with its own transcript and sentiment. Hang up one â€” the other continues.
+**Independent Test**: Enter 2 phone numbers, click "Make a Call," answer both phones, verify each has an independent AI conversation with its own transcript and sentiment. Hang up one Ã¢â‚¬â€ the other continues.
 
 ### API Changes
 
-- [x] T057 [US6] Update `CallRequest` DTO in `ContactCenter-API/Models/CallbackEventModels.cs`: replace `PhoneNumber` (string) with `PhoneNumbers` (string[], required, 1â€“2 items). Add `[MinLength(1)]` and `[MaxLength(2)]` validation. Add E.164 regex validation per item. Per data-model.md Â§1 and contracts/api.yaml.
+- [x] T057 [US6] Update `CallRequest` DTO in `ContactCenter-API/Models/CallbackEventModels.cs`: replace `PhoneNumber` (string) with `PhoneNumbers` (string[], required, 1Ã¢â‚¬â€œ2 items). Add `[MinLength(1)]` and `[MaxLength(2)]` validation. Add E.164 regex validation per item. Per data-model.md Ã‚Â§1 and contracts/api.yaml.
 - [x] T058 [US6] Update `CallService.InitiateCall()` in `ContactCenter-API/Services/CallService.cs`: accept `string[] phoneNumbers` instead of `string phoneNumber`. Loop through the array and call `CreateCallAsync()` for each number. Each call gets its own `ActiveCall` entry, its own `CancellationTokenSource`, and its own callback URI (with distinct `targetNumber` query param for WebSocket correlation). Check that `_activeCalls.Count + phoneNumbers.Length <= 5` before starting any calls. Return a list of `{callConnectionId, phoneNumber}` tuples.
 - [x] T059 [US6] Update `POST /api/Call/initiate` in `ContactCenter-API/Controllers/CallController.cs`: update to use `CallRequest.PhoneNumbers`. Return `CallInitiatedResponse` with a `calls` array of `{callConnectionId, phoneNumber}` objects. Update 429 response to indicate how many slots are available. Per contracts/api.yaml.
 
 ### Tests
 
-- [x] T060 [P] [US6] Update `PhoneNumberValidationTests` in `CallCenterPOC-API.Tests/Unit/PhoneNumberValidationTests.cs`: add tests for (a) array of 1 valid number â†’ pass, (b) array of 2 valid numbers â†’ pass, (c) array of 3 numbers â†’ fail (max 2), (d) empty array â†’ fail, (e) array with 1 valid + 1 invalid â†’ fail.
-- [x] T061 [P] [US6] Update `ConcurrentCallLimitTests` in `CallCenterPOC-API.Tests/Unit/ConcurrentCallLimitTests.cs`: add tests for (a) 4 active + 2 new â†’ reject (would exceed 5), (b) 3 active + 2 new â†’ accept (total 5).
+- [x] T060 [P] [US6] Update `PhoneNumberValidationTests` in `CallCenterPOC-API.Tests/Unit/PhoneNumberValidationTests.cs`: add tests for (a) array of 1 valid number Ã¢â€ â€™ pass, (b) array of 2 valid numbers Ã¢â€ â€™ pass, (c) array of 3 numbers Ã¢â€ â€™ fail (max 2), (d) empty array Ã¢â€ â€™ fail, (e) array with 1 valid + 1 invalid Ã¢â€ â€™ fail.
+- [x] T061 [P] [US6] Update `ConcurrentCallLimitTests` in `CallCenterPOC-API.Tests/Unit/ConcurrentCallLimitTests.cs`: add tests for (a) 4 active + 2 new Ã¢â€ â€™ reject (would exceed 5), (b) 3 active + 2 new Ã¢â€ â€™ accept (total 5).
 
 ### Frontend
 
@@ -234,11 +234,11 @@
 
 **Purpose**: Persist call records on disconnect and provide a Call History page with full transcript, sentiment analytics, and speaker timeline.
 
-**Independent Test**: Make a few calls, navigate to Call History page, verify all calls appear. Click a call to see transcript with sentiment, speaker timeline, and aggregate analytics. Refresh the page â€” data persists.
+**Independent Test**: Make a few calls, navigate to Call History page, verify all calls appear. Click a call to see transcript with sentiment, speaker timeline, and aggregate analytics. Refresh the page Ã¢â‚¬â€ data persists.
 
 ### Models & Persistence
 
-- [x] T065 [US7] Define `CallRecord` model in `ContactCenter-API/Models/CallRecord.cs` with fields: `CallConnectionId`, `PhoneNumber`, `CampaignId?`, `CampaignTitle?`, `Prompt`, `Duration` (TimeSpan), `OverallSentiment` (SentimentLabel), `SentimentBreakdown` (object with PositivePercent/NeutralPercent/NegativePercent), `TalkTimeRatio` (object with AiPercent/RecipientPercent), `TranscriptEntries` (List\<TranscriptEntry\>), `StartedAt`, `EndedAt`. Per data-model.md Â§7.
+- [x] T065 [US7] Define `CallRecord` model in `ContactCenter-API/Models/CallRecord.cs` with fields: `CallConnectionId`, `PhoneNumber`, `CampaignId?`, `CampaignTitle?`, `Prompt`, `Duration` (TimeSpan), `OverallSentiment` (SentimentLabel), `SentimentBreakdown` (object with PositivePercent/NeutralPercent/NegativePercent), `TalkTimeRatio` (object with AiPercent/RecipientPercent), `TranscriptEntries` (List\<TranscriptEntry\>), `StartedAt`, `EndedAt`. Per data-model.md Ã‚Â§7.
 
 ### Tests (Write First)
 
@@ -246,22 +246,22 @@
 
 ### Service
 
-- [x] T067 [US7] Implement `CallHistoryService` in `ContactCenter-API/Services/CallHistoryService.cs`: inject `BlobServiceClient`. Methods: `SaveCallRecordAsync(CallRecord)` â€” serializes to JSON and writes to `call-history/{callConnectionId}.json` in Blob Storage. `GetAllAsync()` â€” lists all blobs in the `call-history/` prefix, reads each, deserializes, returns sorted by `StartedAt` descending. `GetByIdAsync(string callConnectionId)` â€” reads a single blob. Cache the list in memory for fast reads, invalidate on save.
+- [x] T067 [US7] Implement `CallHistoryService` in `ContactCenter-API/Services/CallHistoryService.cs`: inject `BlobServiceClient`. Methods: `SaveCallRecordAsync(CallRecord)` Ã¢â‚¬â€ serializes to JSON and writes to `call-history/{callConnectionId}.json` in Blob Storage. `GetAllAsync()` Ã¢â‚¬â€ lists all blobs in the `call-history/` prefix, reads each, deserializes, returns sorted by `StartedAt` descending. `GetByIdAsync(string callConnectionId)` Ã¢â‚¬â€ reads a single blob. Cache the list in memory for fast reads, invalidate on save.
 - [x] T068 [US7] Register `CallHistoryService` as singleton in `ContactCenter-API/Program.cs`.
 
 ### Controller
 
 - [x] T069 [US7] Implement `CallHistoryController` in `ContactCenter-API/Controllers/CallHistoryController.cs`: `GET /api/CallHistory` returns list of `CallHistorySummary` (subset of CallRecord fields). `GET /api/CallHistory/{callConnectionId}` returns full `CallRecord` with transcript and analytics. Per contracts/api.yaml.
 
-### Integration â€” Persist on Disconnect
+### Integration Ã¢â‚¬â€ Persist on Disconnect
 
 - [x] T070 [US7] Update `ActiveCall` in `ContactCenter-API/Models/ActiveCall.cs`: add `TranscriptEntries` (List\<TranscriptEntry\>) property. In `AzureOpenAIService`, after creating each `TranscriptEntry`, add it to `activeCall.TranscriptEntries` so the transcript accumulates for persistence on disconnect.
 - [x] T071 [US7] Update call cleanup in `CallService` or `CallbackController`: on `CallDisconnected`, compute `Duration`, `OverallSentiment` (majority label), `SentimentBreakdown`, and `TalkTimeRatio` from `activeCall.TranscriptEntries`. Create a `CallRecord` and call `CallHistoryService.SaveCallRecordAsync()`. Do this before removing the `ActiveCall` from the dictionary.
 
-### Frontend â€” Call History Page
+### Frontend Ã¢â‚¬â€ Call History Page
 
 - [x] T072 [US7] Create `ContactCenter-APP/Pages/CallHistory.cshtml` and `CallHistory.cshtml.cs`: Razor page that loads call history from `GET /api/CallHistory` on page load. Displays a table/list of calls with columns: Phone Number, Campaign, Duration, Sentiment (colored badge), Date/Time. Each row is clickable to expand.
-- [x] T073 [US7] Add call detail expansion in `CallHistory.cshtml`: when a row is clicked, fetch `GET /api/CallHistory/{id}` and render: (a) full transcript with per-entry sentiment badges and speaker labels, (b) sentiment breakdown pie/bar chart (using simple HTML/CSS bars â€” no charting library needed for POC), (c) talk-time ratio bar (AI vs Recipient), (d) speaker timeline â€” a horizontal bar divided into colored segments showing who spoke when during the call.
+- [x] T073 [US7] Add call detail expansion in `CallHistory.cshtml`: when a row is clicked, fetch `GET /api/CallHistory/{id}` and render: (a) full transcript with per-entry sentiment badges and speaker labels, (b) sentiment breakdown pie/bar chart (using simple HTML/CSS bars Ã¢â‚¬â€ no charting library needed for POC), (c) talk-time ratio bar (AI vs Recipient), (d) speaker timeline Ã¢â‚¬â€ a horizontal bar divided into colored segments showing who spoke when during the call.
 - [x] T074 [US7] Update `ContactCenter-APP/Pages/Shared/_Layout.cshtml`: add "Call History" link to the navigation bar alongside "Home" and "Privacy."
 - [x] T075 [US7] Add styles for call history page in `ContactCenter-APP/wwwroot/css/site.css`: table/list styling, expandable row animation, sentiment breakdown bars, speaker timeline segments, responsive layout.
 
@@ -287,13 +287,13 @@
 
 ### Layout & Structure
 
-- [x] T079 [US8] Redesign `ContactCenter-APP/Pages/Index.cshtml`: replace the current single-column card layout with a three-panel operations center dashboard. The page uses a full-viewport-height flexbox layout (`height: 100vh` minus nav). **Left panel** (~25% width): phone number inputs (1 and 2), campaign list (loaded dynamically), "New Campaign" button/form, and "Make a Call" button. **Center panel** (~50% width): live call operations area â€” shows an idle state when no call is active; when a call is active, shows call status, live transcript with sentiment badges, and a live sentiment graph. **Right panel** (~25% width): call history list loaded from `/api/CallHistory`, with clickable rows that expand inline to show call detail (transcript, sentiment breakdown, talk-time ratio). Each panel scrolls independently.
+- [x] T079 [US8] Redesign `ContactCenter-APP/Pages/Index.cshtml`: replace the current single-column card layout with a three-panel operations center dashboard. The page uses a full-viewport-height flexbox layout (`height: 100vh` minus nav). **Left panel** (~25% width): phone number inputs (1 and 2), campaign list (loaded dynamically), "New Campaign" button/form, and "Make a Call" button. **Center panel** (~50% width): live call operations area Ã¢â‚¬â€ shows an idle state when no call is active; when a call is active, shows call status, live transcript with sentiment badges, and a live sentiment graph. **Right panel** (~25% width): call history list loaded from `/api/CallHistory`, with clickable rows that expand inline to show call detail (transcript, sentiment breakdown, talk-time ratio). Each panel scrolls independently.
 - [x] T080 [US8] Simplify `ContactCenter-APP/Pages/Shared/_Layout.cshtml`: update the navigation bar for the dashboard. Replace multi-page nav links with a single "Operations Center" branding/title. Remove "Call History" and "Privacy" links (history is now in-panel). Keep the footer minimal. Remove `container` wrapper around `@RenderBody()` to allow full-width dashboard layout.
-- [x] T081 [P] [US8] Remove `ContactCenter-APP/Pages/CallHistory.cshtml` and `ContactCenter-APP/Pages/CallHistory.cshtml.cs` â€” the call history UI is now embedded in the right panel of the dashboard (Index.cshtml). The call history API endpoints remain unchanged.
+- [x] T081 [P] [US8] Remove `ContactCenter-APP/Pages/CallHistory.cshtml` and `ContactCenter-APP/Pages/CallHistory.cshtml.cs` Ã¢â‚¬â€ the call history UI is now embedded in the right panel of the dashboard (Index.cshtml). The call history API endpoints remain unchanged.
 
 ### Live Sentiment Graph
 
-- [x] T082 [US8] Implement a live sentiment analysis graph in the center panel of the dashboard. The graph is a rolling horizontal bar/line chart rendered with pure HTML/CSS/JS (no charting library â€” POC simplicity). Each transcript entry adds a data point: x-axis = entry index or timestamp, y-axis = sentiment value (Positive=1, Neutral=0, Negative=-1). Update the graph on each `TranscriptUpdate` and `SentimentUpdate` SignalR event. Use a `<canvas>` element with simple line drawing, or CSS bars. Show distinct colors: green (positive), gray (neutral), red (negative). The graph auto-scrolls as new entries arrive.
+- [x] T082 [US8] Implement a live sentiment analysis graph in the center panel of the dashboard. The graph is a rolling horizontal bar/line chart rendered with pure HTML/CSS/JS (no charting library Ã¢â‚¬â€ POC simplicity). Each transcript entry adds a data point: x-axis = entry index or timestamp, y-axis = sentiment value (Positive=1, Neutral=0, Negative=-1). Update the graph on each `TranscriptUpdate` and `SentimentUpdate` SignalR event. Use a `<canvas>` element with simple line drawing, or CSS bars. Show distinct colors: green (positive), gray (neutral), red (negative). The graph auto-scrolls as new entries arrive.
 
 ### JavaScript Refactoring
 
@@ -339,12 +339,12 @@
 
 ### Dashboard Layout & Structure
 
-- [x] T091 [US8] Redesign `ContactCenter-APP/Pages/Index.cshtml`: complete rewrite with the professional three-panel layout per spec.md US8. **Left panel** (~22% width, dark sidebar #1e293b): campaign search/filter bar â†’ rich campaign cards with colored category badges â†’ Create Campaign button/inline form â†’ phone number inputs (1 and 2) with E.164 hints â†’ collapsible Prompt Override textarea â†’ "Start Call" button. **Center panel** (~56% width, light bg #f8fafc): idle state with logo, instruction text, and KPI cards (Calls Today, Avg Duration, Overall Sentiment, Success Rate) â†’ active call state with status bar (status badge + phone + campaign badge + timer), call controls bar (End Call red, Mute toggle, Hold toggle, mic level indicator), chat-bubble transcript area, live sentiment graph `<canvas>`, and collapsible Quick Responses panel. **Right panel** (~22% width, dark sidebar #1e293b): active call details card (top) â†’ KPI dashboard (when idle) â†’ scrollable call history list with expandable detail views.
+- [x] T091 [US8] Redesign `ContactCenter-APP/Pages/Index.cshtml`: complete rewrite with the professional three-panel layout per spec.md US8. **Left panel** (~22% width, dark sidebar #1e293b): campaign search/filter bar Ã¢â€ â€™ rich campaign cards with colored category badges Ã¢â€ â€™ Create Campaign button/inline form Ã¢â€ â€™ phone number inputs (1 and 2) with E.164 hints Ã¢â€ â€™ collapsible Prompt Override textarea Ã¢â€ â€™ "Start Call" button. **Center panel** (~56% width, light bg #f8fafc): idle state with logo, instruction text, and KPI cards (Calls Today, Avg Duration, Overall Sentiment, Success Rate) Ã¢â€ â€™ active call state with status bar (status badge + phone + campaign badge + timer), call controls bar (End Call red, Mute toggle, Hold toggle, mic level indicator), chat-bubble transcript area, live sentiment graph `<canvas>`, and collapsible Quick Responses panel. **Right panel** (~22% width, dark sidebar #1e293b): active call details card (top) Ã¢â€ â€™ KPI dashboard (when idle) Ã¢â€ â€™ scrollable call history list with expandable detail views.
 
 ### Styling
 
 - [x] T092 [US8] Rewrite `ContactCenter-APP/wwwroot/css/site.css` for the professional operations center:
-  - **CSS Variables**: Define design system tokens â€” `--navy-dark: #0f172a`, `--sidebar-bg: #1e293b`, `--sidebar-card: #334155`, `--center-bg: #f8fafc`, `--text-light: #f1f5f9`, `--text-dark: #1e293b`, `--accent-green: #22c55e`, `--accent-red: #ef4444`, `--accent-amber: #f59e0b`, `--accent-blue: #3b82f6`, `--accent-purple: #8b5cf6`, `--accent-teal: #14b8a6`, `--accent-orange: #f97316`, `--neutral-gray: #94a3b8`
+  - **CSS Variables**: Define design system tokens Ã¢â‚¬â€ `--navy-dark: #0f172a`, `--sidebar-bg: #1e293b`, `--sidebar-card: #334155`, `--center-bg: #f8fafc`, `--text-light: #f1f5f9`, `--text-dark: #1e293b`, `--accent-green: #22c55e`, `--accent-red: #ef4444`, `--accent-amber: #f59e0b`, `--accent-blue: #3b82f6`, `--accent-purple: #8b5cf6`, `--accent-teal: #14b8a6`, `--accent-orange: #f97316`, `--neutral-gray: #94a3b8`
   - **Header**: Deep navy gradient, white text, subtle border bottom
   - **Three-panel layout**: Flexbox with fixed viewport height, independently scrollable panels with custom scrollbar styling
   - **Campaign cards**: Dark card backgrounds (#334155) with left border accent matching campaign category color, bold title, category badge (pill-shaped with category color bg), description text, hover lift effect with shadow
@@ -358,22 +358,22 @@
   - **Typography**: Inter / Segoe UI / system stack, clear size hierarchy (header 24px, panel titles 16px, body 14px, captions 12px)
   - **Transitions**: 200ms ease on hover/active states, smooth scroll behavior
 
-### JavaScript â€” Call Controls & Campaign Cards
+### JavaScript Ã¢â‚¬â€ Call Controls & Campaign Cards
 
 - [x] T093 [US8] Implement professional call controls in `ContactCenter-APP/wwwroot/js/site.js`:
   - **Call timer**: Start a `setInterval` timer on call connection that updates MM:SS display in the status bar. Stop on disconnection.
-  - **Mute button**: Toggle mute state visually (swap mic/mic-off icon, change button style). Note: actual audio muting requires ACS API support â€” for POC, toggle the visual state and log a message. Wire up to ACS mute API if available.
+  - **Mute button**: Toggle mute state visually (swap mic/mic-off icon, change button style). Note: actual audio muting requires ACS API support Ã¢â‚¬â€ for POC, toggle the visual state and log a message. Wire up to ACS mute API if available.
   - **Hold button**: Toggle hold state visually (swap pause/play icon, change button style). For POC, toggle visual state. Wire up to ACS hold API if available.
-  - **Mic level indicator**: Animate a bar based on transcript activity â€” pulse when a `TranscriptUpdate` arrives for the recipient (simulates mic activity). Alternatively, use a CSS animation.
+  - **Mic level indicator**: Animate a bar based on transcript activity Ã¢â‚¬â€ pulse when a `TranscriptUpdate` arrives for the recipient (simulates mic activity). Alternatively, use a CSS animation.
   - **End Call**: Wire to existing hang-up API (`POST /api/Call/hangup/{id}`) with confirmation.
 
 - [x] T094 [US8] Implement rich campaign cards in `ContactCenter-APP/wwwroot/js/site.js`:
-  - On page load, fetch campaigns from `GET /api/Campaign` and render as rich cards with: bold title, colored category badge (determine color from campaign title keywords â€” "Collection"â†’amber, "Marketing"â†’blue, "Survey"â†’green, "Reminder"â†’purple, "Insurance"/"Renewal"â†’teal, "Upsell"â†’orange, defaultâ†’blue), and truncated description.
+  - On page load, fetch campaigns from `GET /api/Campaign` and render as rich cards with: bold title, colored category badge (determine color from campaign title keywords Ã¢â‚¬â€ "Collection"Ã¢â€ â€™amber, "Marketing"Ã¢â€ â€™blue, "Survey"Ã¢â€ â€™green, "Reminder"Ã¢â€ â€™purple, "Insurance"/"Renewal"Ã¢â€ â€™teal, "Upsell"Ã¢â€ â€™orange, defaultÃ¢â€ â€™blue), and truncated description.
   - **Search/filter**: Wire the search input to filter campaign cards in real time (case-insensitive title/description match).
   - **Selection**: Click a card to select it (add highlighted border + accent), deselect others. Store selected campaign ID.
   - **Create Campaign**: Inline form toggle, POST to API, re-render card list with new card.
 
-### JavaScript â€” Quick Responses & KPIs
+### JavaScript Ã¢â‚¬â€ Quick Responses & KPIs
 
 - [x] T095 [US8] Implement Quick Responses panel in `ContactCenter-APP/wwwroot/js/site.js`:
   - Define campaign-specific quick responses as a JavaScript map keyed by campaign title keywords:
@@ -387,12 +387,12 @@
 
 - [x] T096 [US8] Implement KPI summary cards in `ContactCenter-APP/wwwroot/js/site.js`:
   - Track call metrics in JavaScript state: `callsToday` (count), `totalDuration` (sum of seconds), `sentimentScores` (array of final sentiment values), `successfulCalls` (calls that reached Connected status).
-  - On call completion (status â†’ Disconnected), increment counters and recalculate averages.
+  - On call completion (status Ã¢â€ â€™ Disconnected), increment counters and recalculate averages.
   - Render KPI cards in center panel idle state: "Calls Today" (number), "Avg Duration" (MM:SS), "Overall Sentiment" (% positive or average score), "Success Rate" (% connected/total).
   - Update cards in real-time via SignalR `CallStatusChanged` events.
   - Persist counts to `sessionStorage` so they survive page navigation within the session.
 
-### JavaScript â€” Chat-Bubble Transcript
+### JavaScript Ã¢â‚¬â€ Chat-Bubble Transcript
 
 - [x] T097 [US8] Implement chat-bubble style transcript in `ContactCenter-APP/wwwroot/js/site.js`:
   - Replace the current plain-text transcript rendering with chat-bubble style.
@@ -417,47 +417,47 @@
 
 ### Phase Dependencies
 
-- **Setup (Phase 1)**: No dependencies â€” can start immediately
-- **Foundational (Phase 2)**: Depends on Setup completion â€” **BLOCKS all user stories**
-- **US3 (Phase 3)**: Depends on Foundational â€” must complete before US1 (US1 frontend consumes US3's SignalR events)
-- **US1 (Phase 4)**: Depends on US3 â€” this is the MVP delivery point
-- **US2 (Phase 5)**: Depends on Foundational only â€” can run in parallel with US3/US1 if needed, but sequentially is simpler
-- **US4 (Phase 6)**: Depends on Foundational only â€” can run in parallel with other stories
+- **Setup (Phase 1)**: No dependencies Ã¢â‚¬â€ can start immediately
+- **Foundational (Phase 2)**: Depends on Setup completion Ã¢â‚¬â€ **BLOCKS all user stories**
+- **US3 (Phase 3)**: Depends on Foundational Ã¢â‚¬â€ must complete before US1 (US1 frontend consumes US3's SignalR events)
+- **US1 (Phase 4)**: Depends on US3 Ã¢â‚¬â€ this is the MVP delivery point
+- **US2 (Phase 5)**: Depends on Foundational only Ã¢â‚¬â€ can run in parallel with US3/US1 if needed, but sequentially is simpler
+- **US4 (Phase 6)**: Depends on Foundational only Ã¢â‚¬â€ can run in parallel with other stories
 - **Polish (Phase 7)**: Depends on all user stories being complete
 - **Campaign Management (Phase 8)**: Depends on Phase 7 (builds on top of completed Phase 1 codebase). Replaces PromptScenario with Campaign. Requires `Azure.Storage.Blobs` package.
-- **Sentiment Analysis (Phase 9)**: Depends on Phase 7 (builds on completed codebase with TranscriptEntry + SignalR pipeline from Phase 3). Does NOT depend on Phase 8 â€” sentiment operates on TranscriptEntry independent of Campaign. Can run in parallel with Phase 8.
+- **Sentiment Analysis (Phase 9)**: Depends on Phase 7 (builds on completed codebase with TranscriptEntry + SignalR pipeline from Phase 3). Does NOT depend on Phase 8 Ã¢â‚¬â€ sentiment operates on TranscriptEntry independent of Campaign. Can run in parallel with Phase 8.
 - **Multi-Number Calling (Phase 10)**: Depends on Phase 8 (needs updated CallRequest with CampaignId). Can run in parallel with Phase 9.
 - **Call History (Phase 11)**: Depends on Phase 9 (needs SentimentResult on TranscriptEntry) and Phase 10 (needs multi-number support in CallRecord). Last feature phase.
-- **Integration Testing (Phase 12)**: Depends on all feature phases (8â€“11) being complete.
-- **Operations Center Dashboard (Phase 13)**: Depends on Phase 11 (needs all features working â€” campaigns, sentiment, multi-call, call history). Pure frontend rework, no API changes.
+- **Integration Testing (Phase 12)**: Depends on all feature phases (8Ã¢â‚¬â€œ11) being complete.
+- **Operations Center Dashboard (Phase 13)**: Depends on Phase 11 (needs all features working Ã¢â‚¬â€ campaigns, sentiment, multi-call, call history). Pure frontend rework, no API changes.
 - **Professional UX Redesign (Phase 14)**: Depends on Phase 13 (builds on the three-panel dashboard). Primarily frontend + campaign data update. No new API endpoints.
 
 ### User Story Dependencies
 
 ```
-Phase 1â€“7 (Complete â€” MVP deployed)
-    â”‚
-    â–¼
+Phase 1Ã¢â‚¬â€œ7 (Complete Ã¢â‚¬â€ MVP deployed)
+    Ã¢â€â€š
+    Ã¢â€“Â¼
 Phase 8: Campaign Management (US2 replacement)
-    â”‚                                  â”‚
-    â”‚                                  â”‚ (Phase 9 is independent of Phase 8)
-    â”‚                                  â”‚
-    â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
-    â–¼                                  â–¼
+    Ã¢â€â€š                                  Ã¢â€â€š
+    Ã¢â€â€š                                  Ã¢â€â€š (Phase 9 is independent of Phase 8)
+    Ã¢â€â€š                                  Ã¢â€â€š
+    Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€Â¤
+    Ã¢â€“Â¼                                  Ã¢â€“Â¼
 Phase 10: Multi-Number Calling (US6)  Phase 9: Sentiment Analysis (US5)
-    â”‚                                  â”‚
-    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-                   â–¼
+    Ã¢â€â€š                                  Ã¢â€â€š
+    Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€Â¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€Ëœ
+                   Ã¢â€“Â¼
 Phase 11: Call History & Analytics (US7)
-                   â”‚
-                   â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-                   â–¼                          â–¼
+                   Ã¢â€â€š
+                   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€Â
+                   Ã¢â€“Â¼                          Ã¢â€“Â¼
 Phase 12: Integration Testing    Phase 13: Dashboard UX (US8)
-                                          â”‚
-                                          â–¼
+                                          Ã¢â€â€š
+                                          Ã¢â€“Â¼
                                  Phase 14: Professional UX Redesign
-                                          â”‚
-                                          â–¼
+                                          Ã¢â€â€š
+                                          Ã¢â€“Â¼
                                  Final Deploy & Validation
 ```
 
@@ -487,55 +487,55 @@ Task T014: PhoneNumberValidationTests in CallCenterPOC-API.Tests/Unit/
 Task T015: ConcurrentCallLimitTests in CallCenterPOC-API.Tests/Unit/
 Task T016: CallControllerContractTests in CallCenterPOC-API.Tests/Contract/
 
-# Then implement â€” these two endpoints can be done in parallel:
+# Then implement Ã¢â‚¬â€ these two endpoints can be done in parallel:
 Task T020: POST /api/Call/hangup/{id} in CallController.cs
 Task T021: GET /api/Call/active in CallController.cs
 
 # Sequential tasks (each depends on the previous):
-Task T017: Validation attributes on CallRequest â†’ T022: Controller validation handling
-Task T018: Concurrent limit in CallService â†’ T019: Timeout in CallService
-Task T023: Frontend HTML â†’ T024: Frontend JavaScript â†’ T025: Page model updates
+Task T017: Validation attributes on CallRequest Ã¢â€ â€™ T022: Controller validation handling
+Task T018: Concurrent limit in CallService Ã¢â€ â€™ T019: Timeout in CallService
+Task T023: Frontend HTML Ã¢â€ â€™ T024: Frontend JavaScript Ã¢â€ â€™ T025: Page model updates
 ```
 
 ---
 
 ## Implementation Strategy
 
-### MVP First (Phase 1 â†’ 2 â†’ 3 â†’ 4) âœ… COMPLETE
+### MVP First (Phase 1 Ã¢â€ â€™ 2 Ã¢â€ â€™ 3 Ã¢â€ â€™ 4) Ã¢Å“â€¦ COMPLETE
 
 1. ~~Complete Phase 1: Setup (test project + SignalR client)~~
 2. ~~Complete Phase 2: Foundational (models, thread safety, SignalR hub, CORS)~~
-3. ~~Complete Phase 3: US3 â€” Bidirectional voice with transcript streaming~~
-4. ~~Complete Phase 4: US1 â€” Full operator UX with validation, limits, hang-up~~
-5. ~~Deploy/demo â€” MVP deployed and working~~
+3. ~~Complete Phase 3: US3 Ã¢â‚¬â€ Bidirectional voice with transcript streaming~~
+4. ~~Complete Phase 4: US1 Ã¢â‚¬â€ Full operator UX with validation, limits, hang-up~~
+5. ~~Deploy/demo Ã¢â‚¬â€ MVP deployed and working~~
 
-### Phase 2 Features (Phase 8 â†’ 9/10 â†’ 11 â†’ 12)
+### Phase 2 Features (Phase 8 Ã¢â€ â€™ 9/10 Ã¢â€ â€™ 11 Ã¢â€ â€™ 12)
 
-1. Complete Phase 8: Campaign Management â€” Replace prompts with persistent campaigns + CRUD
+1. Complete Phase 8: Campaign Management Ã¢â‚¬â€ Replace prompts with persistent campaigns + CRUD
 2. Complete Phase 9 & 10 in parallel: Sentiment Analysis + Multi-Number Calling
-3. Complete Phase 11: Call History & Analytics â€” Persist call records, review page
-4. Complete Phase 12: Integration Testing â€” Full E2E validation
-5. **Deploy Phase 2** â€” All new features live
+3. Complete Phase 11: Call History & Analytics Ã¢â‚¬â€ Persist call records, review page
+4. Complete Phase 12: Integration Testing Ã¢â‚¬â€ Full E2E validation
+5. **Deploy Phase 2** Ã¢â‚¬â€ All new features live
 
 ### Incremental Delivery
 
-1. ~~Setup + Foundational â†’ Foundation ready~~
-2. ~~Add US3 â†’ Transcript streaming works â†’ Internal milestone~~
-3. ~~Add US1 â†’ Full operator experience â†’ **Deploy/Demo (MVP!)**~~
-4. ~~Add US2 â†’ Polished prompt selection â†’ Deploy/Demo~~
-5. ~~Add US4 â†’ Recording with thread-safe tracking â†’ Deploy/Demo~~
-6. ~~Polish â†’ Production-quality logging, cleanup â†’ Final delivery~~
-7. Add Campaign Management â†’ Persistent campaigns with CRUD â†’ Deploy/Demo
-8. Add Sentiment Analysis â†’ Real-time sentiment badges â†’ Deploy/Demo
-9. Add Multi-Number Calling â†’ 2 simultaneous calls â†’ Deploy/Demo
-10. Add Call History â†’ Post-call review with analytics â†’ **Deploy Phase 2**
-11. Integration Testing â†’ Full E2E validation â†’ Final delivery
-12. Operations Center Dashboard â†’ Professional three-panel UX â†’ **Deploy Phase 3**
-13. Professional UX Redesign â†’ Enterprise-grade dashboard with 6 outbound campaigns, deep navy theme, call controls, chat-bubble transcript, KPI cards, quick responses â†’ **Deploy Phase 4**
+1. ~~Setup + Foundational Ã¢â€ â€™ Foundation ready~~
+2. ~~Add US3 Ã¢â€ â€™ Transcript streaming works Ã¢â€ â€™ Internal milestone~~
+3. ~~Add US1 Ã¢â€ â€™ Full operator experience Ã¢â€ â€™ **Deploy/Demo (MVP!)**~~
+4. ~~Add US2 Ã¢â€ â€™ Polished prompt selection Ã¢â€ â€™ Deploy/Demo~~
+5. ~~Add US4 Ã¢â€ â€™ Recording with thread-safe tracking Ã¢â€ â€™ Deploy/Demo~~
+6. ~~Polish Ã¢â€ â€™ Production-quality logging, cleanup Ã¢â€ â€™ Final delivery~~
+7. Add Campaign Management Ã¢â€ â€™ Persistent campaigns with CRUD Ã¢â€ â€™ Deploy/Demo
+8. Add Sentiment Analysis Ã¢â€ â€™ Real-time sentiment badges Ã¢â€ â€™ Deploy/Demo
+9. Add Multi-Number Calling Ã¢â€ â€™ 2 simultaneous calls Ã¢â€ â€™ Deploy/Demo
+10. Add Call History Ã¢â€ â€™ Post-call review with analytics Ã¢â€ â€™ **Deploy Phase 2**
+11. Integration Testing Ã¢â€ â€™ Full E2E validation Ã¢â€ â€™ Final delivery
+12. Operations Center Dashboard Ã¢â€ â€™ Professional three-panel UX Ã¢â€ â€™ **Deploy Phase 3**
+13. Professional UX Redesign Ã¢â€ â€™ Enterprise-grade dashboard with 6 outbound campaigns, deep navy theme, call controls, chat-bubble transcript, KPI cards, quick responses Ã¢â€ â€™ **Deploy Phase 4**
 
 ### Single Developer Strategy (Recommended for POC)
 
-Work sequentially: Phase 1 â†’ 2 â†’ 3 â†’ 4 â†’ 5 â†’ 6 â†’ 7. Within each phase, exploit parallel opportunities where tasks touch different files. Commit after each completed task or logical group.
+Work sequentially: Phase 1 Ã¢â€ â€™ 2 Ã¢â€ â€™ 3 Ã¢â€ â€™ 4 Ã¢â€ â€™ 5 Ã¢â€ â€™ 6 Ã¢â€ â€™ 7. Within each phase, exploit parallel opportunities where tasks touch different files. Commit after each completed task or logical group.
 
 ---
 
@@ -547,29 +547,29 @@ Work sequentially: Phase 1 â†’ 2 â†’ 3 â†’ 4 â†’ 5 â†’ 
 - Tests MUST fail before implementing the feature they test
 - Commit after each task or logical group
 - Stop at any checkpoint to validate the story independently
-- T001â€“T035 are complete (Phase 1 MVP deployed and working)
-- T036 pending (E2E validation of MVP — carry-forward quality gate)
-- T076 and T077 pending (Phase 12 integration testing — carry-forward quality gates, run after all feature phases are deployed)
-- T037â€“T078 are Phase 2 tasks (campaigns, sentiment, multi-number, call history)
-- Phase 2 builds on the working MVP â€” the existing bidirectional voice, transcript, recording, and prompt scenario features are all functional
-- Key refactoring: `CallRequest.PhoneNumber` â†’ `CallRequest.PhoneNumbers` (T057) is the most impactful Phase 2 API change
+- T001Ã¢â‚¬â€œT035 are complete (Phase 1 MVP deployed and working)
+- T036 pending (E2E validation of MVP â€” carry-forward quality gate)
+- T076 and T077 pending (Phase 12 integration testing â€” carry-forward quality gates, run after all feature phases are deployed)
+- T037Ã¢â‚¬â€œT078 are Phase 2 tasks (campaigns, sentiment, multi-number, call history)
+- Phase 2 builds on the working MVP Ã¢â‚¬â€ the existing bidirectional voice, transcript, recording, and prompt scenario features are all functional
+- Key refactoring: `CallRequest.PhoneNumber` Ã¢â€ â€™ `CallRequest.PhoneNumbers` (T057) is the most impactful Phase 2 API change
 - Key new dependency: `Azure.Storage.Blobs` (T043) for campaign + call history persistence
-- T079â€“T087 are Phase 3 tasks (operations center dashboard UX redesign)
-- Phase 3 is frontend-only â€” no API changes required. All existing API endpoints remain unchanged.
-- The `CallHistory.cshtml` page is removed in T081 â€” its functionality moves into the right panel of the dashboard
-- The dashboard uses `<canvas>` or CSS-only charts for the live sentiment graph â€” no third-party charting library (POC simplicity)
-- T088â€“T099 are Phase 4 tasks (professional UX redesign + campaign expansion)
+- T079Ã¢â‚¬â€œT087 are Phase 3 tasks (operations center dashboard UX redesign)
+- Phase 3 is frontend-only Ã¢â‚¬â€ no API changes required. All existing API endpoints remain unchanged.
+- The `CallHistory.cshtml` page is removed in T081 Ã¢â‚¬â€ its functionality moves into the right panel of the dashboard
+- The dashboard uses `<canvas>` or CSS-only charts for the live sentiment graph Ã¢â‚¬â€ no third-party charting library (POC simplicity)
+- T088Ã¢â‚¬â€œT099 are Phase 4 tasks (professional UX redesign + campaign expansion)
 - Phase 4 replaces the 4 generic default campaigns with 6 outbound-focused campaigns with detailed AI behavior instructions
-- Phase 4 is primarily frontend + campaign data â€” no new API endpoints required
+- Phase 4 is primarily frontend + campaign data Ã¢â‚¬â€ no new API endpoints required
 - Campaign category badge colors: Collections=amber, Marketing=blue, Survey=green, Reminder=purple, Renewal=teal, Upsell=orange
 - Quick response suggestions are defined in JavaScript (client-side), keyed by campaign title keywords
-- KPI metrics are tracked in-session (sessionStorage) â€” not persisted server-side for POC simplicity
-- Call controls (Mute, Hold) are visual toggles in POC â€” actual ACS mute/hold API integration is stretch goal
-- T100â€“T112 are Phase 15 tasks (recording playback, sentiment fix, contact names)
+- KPI metrics are tracked in-session (sessionStorage) Ã¢â‚¬â€ not persisted server-side for POC simplicity
+- Call controls (Mute, Hold) are visual toggles in POC Ã¢â‚¬â€ actual ACS mute/hold API integration is stretch goal
+- T100Ã¢â‚¬â€œT112 are Phase 15 tasks (recording playback, sentiment fix, contact names)
 - Phase 15 adds US9 (recording playback) and US10 (contact names), and fixes US5 sentiment on Azure
-- Recording playback uses ACS CallRecording download API â€” recordings are MP3 files stored in configured Blob Storage
-- Contact names are optional â€” the AI prompt is dynamically prepended with name instructions when provided
-- Sentiment fix is a configuration-only change â€” no code modifications needed
+- Recording playback uses ACS CallRecording download API Ã¢â‚¬â€ recordings are MP3 files stored in configured Blob Storage
+- Contact names are optional Ã¢â‚¬â€ the AI prompt is dynamically prepended with name instructions when provided
+- Sentiment fix is a configuration-only change Ã¢â‚¬â€ no code modifications needed
 
 ---
 
@@ -577,30 +577,30 @@ Work sequentially: Phase 1 â†’ 2 â†’ 3 â†’ 4 â†’ 5 â†’ 
 
 **Purpose**: Three new features and one critical bug fix: (1) Allow operators to listen to call recordings from the call history panel, (2) Fix sentiment analysis on Azure (missing `ChatDeployment` config), (3) Add optional contact name fields for personalized AI greetings.
 
-**Independent Test**: Fix sentiment â†’ verify sentiment dots/graph work during live calls. Add contact name â†’ initiate call, verify AI greets by name. Complete a call â†’ click history entry â†’ play recording audio. View history â†’ verify contact name shown.
+**Independent Test**: Fix sentiment Ã¢â€ â€™ verify sentiment dots/graph work during live calls. Add contact name Ã¢â€ â€™ initiate call, verify AI greets by name. Complete a call Ã¢â€ â€™ click history entry Ã¢â€ â€™ play recording audio. View history Ã¢â€ â€™ verify contact name shown.
 
 ### Sentiment Fix (US5 Bug)
 
-- [x] T100 [US5] Fix sentiment analysis on Azure: run `az webapp config appsettings set` to add `AzureOpenAI__ChatDeployment=gpt-4o-mini` to the `contactcenterpoc-api` App Service. No code changes required â€” the `SentimentAnalysisService` and SignalR infrastructure are fully implemented but the ChatDeployment config was missing, causing `_chatClient` to be null and all sentiment to return Neutral.
+- [x] T100 [US5] Fix sentiment analysis on Azure: run `az webapp config appsettings set` to add `AzureOpenAI__ChatDeployment=gpt-4o-mini` to the `contactcenterpoc-api` App Service. No code changes required Ã¢â‚¬â€ the `SentimentAnalysisService` and SignalR infrastructure are fully implemented but the ChatDeployment config was missing, causing `_chatClient` to be null and all sentiment to return Neutral.
 
-### Contact Name â€” Models & API
+### Contact Name Ã¢â‚¬â€ Models & API
 
 - [x] T101 [US10] Update `CallRequest` DTO in `ContactCenter-API/Models/CallbackEventModels.cs`: add `ContactNames` (string[]?, optional) field parallel to `PhoneNumbers`. When provided, array indices correspond 1:1 with `PhoneNumbers`.
 - [x] T102 [P] [US10] Update `ActiveCall` in `ContactCenter-API/Models/ActiveCall.cs`: add `ContactName` (string?) field to store the contact name for each call.
 - [x] T103 [P] [US10] Update `CallRecord` in `ContactCenter-API/Models/CallRecord.cs`: add `ContactName` (string?) field. Update `CallHistorySummary` to include `ContactName`.
 
-### Contact Name â€” Service Integration
+### Contact Name Ã¢â‚¬â€ Service Integration
 
 - [x] T104 [US10] Update `CallService.InitiateCall()` in `ContactCenter-API/Services/CallService.cs`: accept `string[]? contactNames` parameter. For each phone number, if a contact name is provided, prepend to the effective prompt: `"IMPORTANT: The person you are calling is named {name}. You MUST greet them by name at the start of the conversation, for example: 'Hello {name}'. "`. Store `ContactName` on the `ActiveCall`.
 - [x] T105 [US10] Update `CallController.Initiate()` in `ContactCenter-API/Controllers/CallController.cs`: pass `CallRequest.ContactNames` through to `CallService.InitiateCall()`.
 - [x] T106 [US10] Update call disconnect persistence in `CallbackController` or `CallService`: include `ContactName` from `ActiveCall` when creating the `CallRecord`.
 
-### Recording Playback â€” Models & API
+### Recording Playback Ã¢â‚¬â€ Models & API
 
 - [x] T107 [US9] Update `CallRecord` in `ContactCenter-API/Models/CallRecord.cs`: add `RecordingId` (string?) field. Update call disconnect persistence to copy `ActiveCall.RecordingId` into the `CallRecord`.
 - [x] T108 [US9] Add `GET /api/CallHistory/{callConnectionId}/recording` endpoint in `ContactCenter-API/Controllers/CallHistoryController.cs`: look up the `CallRecord` by ID, retrieve the `RecordingId`, use `CallAutomationClient.GetCallRecording().DownloadStreamingAsync(recordingId)` to download the recording content, and stream it to the client with `Content-Type: audio/mpeg`. Return 404 if no recording exists.
 
-### Recording Playback & Contact Name â€” Frontend
+### Recording Playback & Contact Name Ã¢â‚¬â€ Frontend
 
 - [x] T109 [US9] [US10] Update `ContactCenter-APP/Pages/Index.cshtml`: (a) Add optional contact name `<input>` fields next to each phone number input. (b) Add an `<audio>` element with controls inside the call detail panel (`callDetailPanel`) for recording playback, initially hidden.
 - [x] T110 [US9] [US10] Update `ContactCenter-APP/wwwroot/js/site.js`: (a) Collect contact names from input fields and include in the API call body. (b) In `loadCallDetail()`, if the record has a `recordingId`, show the audio player with `src` set to `{apiBaseUrl}/api/CallHistory/{id}/recording`; otherwise show "No recording available". (c) Display contact name alongside phone number in history list and detail view.
@@ -618,17 +618,17 @@ Work sequentially: Phase 1 â†’ 2 â†’ 3 â†’ 4 â†’ 5 â†’ 
 
 **Purpose**: Fix three critical bugs found during production testing: (1) call history not surviving API restarts because Blob Storage was not configured, (2) recording download endpoint broken because it uses ACS `RecordingId` as a URL instead of downloading from Blob Storage, (3) campaign prompt not updating when clicking different campaigns.
 
-**Independent Test**: Deploy API â†’ make a call â†’ verify history survives page refresh and API restart. Click a completed call in history â†’ play recording audio. Select different campaigns â†’ verify prompt preview updates and old override text is cleared.
+**Independent Test**: Deploy API Ã¢â€ â€™ make a call Ã¢â€ â€™ verify history survives page refresh and API restart. Click a completed call in history Ã¢â€ â€™ play recording audio. Select different campaigns Ã¢â€ â€™ verify prompt preview updates and old override text is cleared.
 
 ### Notes
-- T113â€“T119 are Phase 16 tasks (history persistence, recording fix, campaign prompt UX)
+- T113Ã¢â‚¬â€œT119 are Phase 16 tasks (history persistence, recording fix, campaign prompt UX)
 - Root cause of history loss: `BlobStorage:AccountUri` was never set on Azure, causing `BlobServiceClient` to use `UseDevelopmentStorage=true` fallback which silently fails
-- Root cause of recording failure: ACS `RecordingId` is an opaque string, not a download URL â€” `DownloadStreamingAsync(new Uri(recordingId))` throws
+- Root cause of recording failure: ACS `RecordingId` is an opaque string, not a download URL Ã¢â‚¬â€ `DownloadStreamingAsync(new Uri(recordingId))` throws
 - Root cause of campaign prompt: `selectCampaign()` only updates prompt if textarea is empty, and `initiateCall()` always sends the textarea content as `prompt` which overrides `campaignId` in the API
 
 ### Blob Storage Config Fix
 
-- [x] T113 [FR-043] Update `ContactCenter-API/Program.cs`: if neither `BlobStorage:ConnectionString` nor `BlobStorage:AccountUri` is set, derive `BlobStorage:AccountUri` from the `BlobContainer` URL by parsing the storage account base URL (e.g., `https://account.blob.core.windows.net/container` â†’ `https://account.blob.core.windows.net`). Also set `BlobStorage__AccountUri` on the Azure App Service.
+- [x] T113 [FR-043] Update `ContactCenter-API/Program.cs`: if neither `BlobStorage:ConnectionString` nor `BlobStorage:AccountUri` is set, derive `BlobStorage:AccountUri` from the `BlobContainer` URL by parsing the storage account base URL (e.g., `https://account.blob.core.windows.net/container` Ã¢â€ â€™ `https://account.blob.core.windows.net`). Also set `BlobStorage__AccountUri` on the Azure App Service.
 
 ### Recording Download Fix
 
@@ -637,8 +637,8 @@ Work sequentially: Phase 1 â†’ 2 â†’ 3 â†’ 4 â†’ 5 â†’ 
 
 ### Campaign Prompt UX Fix
 
-- [x] T116 [FR-045] Update `ContactCenter-APP/Pages/Index.cshtml`: add a campaign prompt preview section below the campaign cards â€” a read-only area that shows the selected campaign's AI behavior instructions. Initially hidden, shown when a campaign is selected.
-- [x] T117 [FR-045] Update `ContactCenter-APP/wwwroot/js/site.js`: (a) In `selectCampaign()`, always clear the prompt override textarea and show the campaign's `aiBehaviorInstructions` in the preview area. (b) In `initiateCall()`, only include `prompt` in the request body if the prompt override textarea has user-typed text (track via a `promptManuallyEdited` flag). (c) Show a recording indicator icon (ðŸŽ™) on history list items when `hasRecording` is true.
+- [x] T116 [FR-045] Update `ContactCenter-APP/Pages/Index.cshtml`: add a campaign prompt preview section below the campaign cards Ã¢â‚¬â€ a read-only area that shows the selected campaign's AI behavior instructions. Initially hidden, shown when a campaign is selected.
+- [x] T117 [FR-045] Update `ContactCenter-APP/wwwroot/js/site.js`: (a) In `selectCampaign()`, always clear the prompt override textarea and show the campaign's `aiBehaviorInstructions` in the preview area. (b) In `initiateCall()`, only include `prompt` in the request body if the prompt override textarea has user-typed text (track via a `promptManuallyEdited` flag). (c) Show a recording indicator icon (Ã°Å¸Å½â„¢) on history list items when `hasRecording` is true.
 - [x] T118 [P] Update `ContactCenter-APP/wwwroot/css/site.css`: add styles for the campaign prompt preview area (read-only look, muted background, smaller font, max-height with overflow scroll).
 
 ### Azure Configuration
@@ -649,15 +649,15 @@ Work sequentially: Phase 1 â†’ 2 â†’ 3 â†’ 4 â†’ 5 â†’ 
 
 ---
 
-## Phase 17 â€” Sentiment & History Production Fixes
+## Phase 17 Ã¢â‚¬â€ Sentiment & History Production Fixes
 
-**Purpose**: Fix production issues: (1) call history container name not derived from `BlobContainer` URL â€” defaults to nonexistent `callcenter-data` container, (2) sentiment analysis returns Neutral due to Azure OpenAI auth/config or model-parameter mismatches, (3) sentiment timeline uses single-message context â€” enhance with rolling 5-second window for richer (but still reactive) analysis.
+**Purpose**: Fix production issues: (1) call history container name not derived from `BlobContainer` URL Ã¢â‚¬â€ defaults to nonexistent `callcenter-data` container, (2) sentiment analysis returns Neutral due to Azure OpenAI auth/config or model-parameter mismatches, (3) sentiment timeline uses single-message context Ã¢â‚¬â€ enhance with rolling 5-second window for richer (but still reactive) analysis.
 
-**Independent Test**: Deploy API â†’ make a call â†’ verify call appears in history after page refresh. During a call, verify sentiment dots show Positive/Negative (not all Neutral). Verify sentiment timeline graph moves with the conversation.
+**Independent Test**: Deploy API Ã¢â€ â€™ make a call Ã¢â€ â€™ verify call appears in history after page refresh. During a call, verify sentiment dots show Positive/Negative (not all Neutral). Verify sentiment timeline graph moves with the conversation.
 
 ### Blob Container Name Fix
 
-- [x] T120 [FR-043] Update `ContactCenter-API/Program.cs`: when deriving `BlobStorage:AccountUri` from `BlobContainer` URL, also extract the container name from the URL path and set `BlobStorage:ContainerName` in configuration (e.g., `https://account.blob.core.windows.net/callsstorage` â†’ container name `callsstorage`). This ensures `CallHistoryService` and `CampaignService` use the correct container.
+- [x] T120 [FR-043] Update `ContactCenter-API/Program.cs`: when deriving `BlobStorage:AccountUri` from `BlobContainer` URL, also extract the container name from the URL path and set `BlobStorage:ContainerName` in configuration (e.g., `https://account.blob.core.windows.net/callsstorage` Ã¢â€ â€™ container name `callsstorage`). This ensures `CallHistoryService` and `CampaignService` use the correct container.
 
 ### Sentiment Auth Fix
 
@@ -694,9 +694,9 @@ Work sequentially: Phase 1 â†’ 2 â†’ 3 â†’ 4 â†’ 5 â†’ 
 ### API
 
 - [x] T128 [US11] Add `POST /api/CallHistory/{callConnectionId}/transcribe?force=false` endpoint in `ContactCenter-API/Controllers/CallHistoryController.cs`:
-  - If record not found or no recording exists â†’ return 404/400 with a helpful message
-  - If transcript already exists and `force=false` â†’ return existing record
-  - Otherwise â†’ transcribe, persist transcript into call history JSON, return updated record
+  - If record not found or no recording exists Ã¢â€ â€™ return 404/400 with a helpful message
+  - If transcript already exists and `force=false` Ã¢â€ â€™ return existing record
+  - Otherwise Ã¢â€ â€™ transcribe, persist transcript into call history JSON, return updated record
 
 ### Frontend
 
@@ -713,7 +713,7 @@ Work sequentially: Phase 1 â†’ 2 â†’ 3 â†’ 4 â†’ 5 â†’ 
 
 **Purpose**: Ensure historical calls reliably appear across refresh/restart/scale-out, reduce storage thrash, and recover older calls where recordings exist but `call-history/` JSON is missing.
 
-**Independent Test**: Start a call â†’ refresh the UI â†’ the call appears in history immediately. Complete a call â†’ refresh â†’ final record still present. If `call-history/` is empty but ACS recordings exist â†’ refresh history â†’ records are rebuilt and show up. Click recording â†’ audio can seek (range requests).
+**Independent Test**: Start a call Ã¢â€ â€™ refresh the UI Ã¢â€ â€™ the call appears in history immediately. Complete a call Ã¢â€ â€™ refresh Ã¢â€ â€™ final record still present. If `call-history/` is empty but ACS recordings exist Ã¢â€ â€™ refresh history Ã¢â€ â€™ records are rebuilt and show up. Click recording Ã¢â€ â€™ audio can seek (range requests).
 
 - [x] T132 Persist initial call record at initiation in `ContactCenter-API/Services/CallService.cs`: after `CreateCallAsync()` returns `callConnectionId`, immediately write a minimal `CallRecord` via `CallHistoryService.SaveCallRecordAsync()` (duration=0, transcript empty) so new calls show up in history even if disconnect persistence is delayed.
 - [x] T133 Add short-lived call history summary cache with TTL in `ContactCenter-API/Services/CallHistoryService.cs`: maintain `_summaryCache` and refresh at most every N seconds (default 5) using `CallHistory:CacheTtlSeconds` to prevent stale empties and reduce repeated blob listing.
@@ -795,67 +795,67 @@ Work sequentially: Phase 1 â†’ 2 â†’ 3 â†’ 4 â†’ 5 â†’ 
 
 **Purpose**: Five quick wins from code analysis (Swagger guard, health check, shared base class, pagination, post-call summary) plus a settings overlay with configurable max call time and Voice API selector.
 
-**Independent Test**: Verify Swagger is not accessible in production. Hit `/healthz` — returns 200. Open call history — paginated (20 per page). Place a call — auto-terminates at configured max time (default 2 min). Click the gear icon — settings overlay opens. Change max call time to 3 min — new calls respect it. After call ends — summary appears in historical detail.
+**Independent Test**: Verify Swagger is not accessible in production. Hit `/healthz` â€” returns 200. Open call history â€” paginated (20 per page). Place a call â€” auto-terminates at configured max time (default 2 min). Click the gear icon â€” settings overlay opens. Change max call time to 3 min â€” new calls respect it. After call ends â€” summary appears in historical detail.
 
 ### Quick Win 1: Swagger Production Guard
 
-- [ ] T150 [FR-068] Update `ContactCenter-API/Program.cs`: re-enable the `if (app.Environment.IsDevelopment())` guard around `app.UseSwagger()` and `app.UseSwaggerUI()`. Un-comment the conditional that was commented out during debugging.
+- [x] T150 [FR-068] Update `ContactCenter-API/Program.cs`: re-enable the `if (app.Environment.IsDevelopment())` guard around `app.UseSwagger()` and `app.UseSwaggerUI()`. Un-comment the conditional that was commented out during debugging.
 
 ### Quick Win 2: Health Check Endpoint
 
-- [ ] T151 [FR-063] Update `ContactCenter-API/Program.cs`: add `app.MapGet("/healthz", () => Results.Ok(new { status = "healthy", timestamp = DateTimeOffset.UtcNow }))` before `app.Run()`.
+- [x] T151 [FR-063] Update `ContactCenter-API/Program.cs`: add `app.MapGet("/healthz", () => Results.Ok(new { status = "healthy", timestamp = DateTimeOffset.UtcNow }))` before `app.Run()`.
 
 ### Quick Win 3: Shared Analysis Base Class
 
-- [ ] T152 [FR-067] Create `ContactCenter-API/Services/AzureOpenAIAnalysisBase.cs`: abstract base class with Azure OpenAI HTTP client setup (endpoint, auth via `DefaultAzureCredential` or API key), shared `CallChatCompletionAsync(systemPrompt, userMessage, maxTokens, reasoningEffort)` method with primary/legacy parameter retry logic, and JSON response extraction. Move the duplicated fields (`_endpointUri`, `_apiKey`, `_deployment`, `_credential`, `HttpClient`, constants) from the three analysis services into this base.
-- [ ] T153 [P] [FR-067] Refactor `ContactCenter-API/Services/SentimentAnalysisService.cs` to inherit from `AzureOpenAIAnalysisBase`. Remove duplicated auth/HTTP code. Keep sentiment-specific prompt and result parsing.
-- [ ] T154 [P] [FR-067] Refactor `ContactCenter-API/Services/EmotionAnalysisService.cs` to inherit from `AzureOpenAIAnalysisBase`. Remove duplicated auth/HTTP code. Keep emotion-specific prompt and result parsing.
-- [ ] T155 [P] [FR-067] Refactor `ContactCenter-API/Services/OperatorStyleAnalysisService.cs` to inherit from `AzureOpenAIAnalysisBase`. Remove duplicated auth/HTTP code. Keep operator-traits-specific prompt and result parsing.
+- [x] T152 [FR-067] Create `ContactCenter-API/Services/AzureOpenAIAnalysisBase.cs`: abstract base class with Azure OpenAI HTTP client setup (endpoint, auth via `DefaultAzureCredential` or API key), shared `CallChatCompletionAsync(systemPrompt, userMessage, maxTokens, reasoningEffort)` method with primary/legacy parameter retry logic, and JSON response extraction. Move the duplicated fields (`_endpointUri`, `_apiKey`, `_deployment`, `_credential`, `HttpClient`, constants) from the three analysis services into this base.
+- [x] T153 [P] [FR-067] Refactor `ContactCenter-API/Services/SentimentAnalysisService.cs` to inherit from `AzureOpenAIAnalysisBase`. Remove duplicated auth/HTTP code. Keep sentiment-specific prompt and result parsing.
+- [x] T154 [P] [FR-067] Refactor `ContactCenter-API/Services/EmotionAnalysisService.cs` to inherit from `AzureOpenAIAnalysisBase`. Remove duplicated auth/HTTP code. Keep emotion-specific prompt and result parsing.
+- [x] T155 [P] [FR-067] Refactor `ContactCenter-API/Services/OperatorStyleAnalysisService.cs` to inherit from `AzureOpenAIAnalysisBase`. Remove duplicated auth/HTTP code. Keep operator-traits-specific prompt and result parsing.
 
 ### Quick Win 4: Call History Pagination
 
-- [ ] T156 [FR-064] Update `ContactCenter-API/Services/CallHistoryService.cs`: add `GetPagedAsync(int page, int pageSize)` method that returns `{ totalCount, page, pageSize, items[] }`. Builds on existing `GetAllAsync()` cached summaries.
-- [ ] T157 [FR-064] Update `ContactCenter-API/Controllers/CallHistoryController.cs`: update `GET /api/CallHistory` to accept `page` (default 1) and `pageSize` (default 20) query parameters. Return paginated response wrapper.
-- [ ] T158 [FR-064] Update `ContactCenter-APP/wwwroot/js/site.js`: update `loadCallHistory()` to pass `page`/`pageSize` parameters. Add "Load More" button or page navigation in the historical calls tab.
+- [x] T156 [FR-064] Update `ContactCenter-API/Services/CallHistoryService.cs`: add `GetPagedAsync(int page, int pageSize)` method that returns `{ totalCount, page, pageSize, items[] }`. Builds on existing `GetAllAsync()` cached summaries.
+- [x] T157 [FR-064] Update `ContactCenter-API/Controllers/CallHistoryController.cs`: update `GET /api/CallHistory` to accept `page` (default 1) and `pageSize` (default 20) query parameters. Return paginated response wrapper.
+- [x] T158 [FR-064] Update `ContactCenter-APP/wwwroot/js/site.js`: update `loadCallHistory()` to pass `page`/`pageSize` parameters. Add "Load More" button or page navigation in the historical calls tab.
 
 ### Quick Win 5: Post-Call Summary Generation
 
-- [ ] T159 [FR-066] [US14] Add `CallSummary` (string?) and `SummarizedAt` (DateTimeOffset?) fields to `ContactCenter-API/Models/CallRecord.cs`.
-- [ ] T160 [FR-066] [US14] Create `ContactCenter-API/Services/CallSummaryService.cs`: inherits from `AzureOpenAIAnalysisBase`. Method `GenerateSummaryAsync(List<TranscriptEntry> entries)` sends transcript to Azure OpenAI with a summarization prompt and returns a 2-4 sentence summary string.
-- [ ] T161 [FR-066] [US14] Update call disconnect persistence in `CallService` or `CallbackController`: after building the `CallRecord`, call `CallSummaryService.GenerateSummaryAsync()` and set `CallRecord.CallSummary`. Fire-and-forget with error logging (don't block disconnect).
-- [ ] T162 [US14] Update `ContactCenter-APP/wwwroot/js/site.js`: display `CallSummary` in the historical detail center panel, above the transcript, in a styled summary card.
+- [x] T159 [FR-066] [US14] Add `CallSummary` (string?) and `SummarizedAt` (DateTimeOffset?) fields to `ContactCenter-API/Models/CallRecord.cs`.
+- [x] T160 [FR-066] [US14] Create `ContactCenter-API/Services/CallSummaryService.cs`: inherits from `AzureOpenAIAnalysisBase`. Method `GenerateSummaryAsync(List<TranscriptEntry> entries)` sends transcript to Azure OpenAI with a summarization prompt and returns a 2-4 sentence summary string.
+- [x] T161 [FR-066] [US14] Update call disconnect persistence in `CallService` or `CallbackController`: after building the `CallRecord`, call `CallSummaryService.GenerateSummaryAsync()` and set `CallRecord.CallSummary`. Fire-and-forget with error logging (don't block disconnect).
+- [x] T162 [US14] Update `ContactCenter-APP/wwwroot/js/site.js`: display `CallSummary` in the historical detail center panel, above the transcript, in a styled summary card.
 
-### Settings Overlay — Backend
+### Settings Overlay â€” Backend
 
-- [ ] T163 [FR-065] Create `ContactCenter-API/Models/Settings.cs`: `OperatorSettings` model with `MaxCallTimeMinutes` (int, default 2), `VoiceApi` (string, default "chatgpt-realtime"), `SelectedVoice` (string, default "alloy"). Valid voice values: alloy, echo, fable, onyx, nova, shimmer.
-- [ ] T164 [FR-065] Create `ContactCenter-API/Services/SettingsService.cs`: singleton service that reads/writes `settings.json` in the configured Blob container. Methods: `GetSettingsAsync()`, `SaveSettingsAsync(OperatorSettings)`. Cache in memory, invalidate on save.
-- [ ] T165 [FR-065] Create `ContactCenter-API/Controllers/SettingsController.cs`: `GET /api/Settings` returns current settings. `PUT /api/Settings` accepts updated settings body and persists via `SettingsService`.
-- [ ] T166 [FR-061] Update `ContactCenter-API/Services/CallService.cs`: inject `SettingsService`. In `InitiateCall()`, read `MaxCallTimeMinutes` from settings instead of hardcoded `TimeSpan.FromMinutes(5)`. Default to 2 minutes if settings unavailable.
-- [ ] T167 Register `CallSummaryService` and `SettingsService` as singletons in `ContactCenter-API/Program.cs`.
+- [x] T163 [FR-065] Create `ContactCenter-API/Models/Settings.cs`: `OperatorSettings` model with `MaxCallTimeMinutes` (int, default 2), `VoiceApi` (string, default "chatgpt-realtime"), `SelectedVoice` (string, default "alloy"). Valid voice values: alloy, echo, fable, onyx, nova, shimmer.
+- [x] T164 [FR-065] Create `ContactCenter-API/Services/SettingsService.cs`: singleton service that reads/writes `settings.json` in the configured Blob container. Methods: `GetSettingsAsync()`, `SaveSettingsAsync(OperatorSettings)`. Cache in memory, invalidate on save.
+- [x] T165 [FR-065] Create `ContactCenter-API/Controllers/SettingsController.cs`: `GET /api/Settings` returns current settings. `PUT /api/Settings` accepts updated settings body and persists via `SettingsService`.
+- [x] T166 [FR-061] Update `ContactCenter-API/Services/CallService.cs`: inject `SettingsService`. In `InitiateCall()`, read `MaxCallTimeMinutes` from settings instead of hardcoded `TimeSpan.FromMinutes(5)`. Default to 2 minutes if settings unavailable.
+- [x] T167 Register `CallSummaryService` and `SettingsService` as singletons in `ContactCenter-API/Program.cs`.
 
-### Settings Overlay — Frontend
+### Settings Overlay â€” Frontend
 
-- [ ] T168 [FR-060] Update `ContactCenter-APP/Pages/Shared/_Layout.cshtml`: add a gear icon (SVG) to the right side of the header bar, before the "Operations Dashboard" badge. Wire `onclick` to toggle settings overlay.
-- [ ] T169 [FR-060] Update `ContactCenter-APP/Pages/Index.cshtml`: add settings overlay HTML — a right-side sliding panel with dark theme. Contains: Max Call Time slider/input (1-10 min), Voice API selector (radio buttons), AI Voice dropdown (Alloy/Echo/Fable/Onyx/Nova/Shimmer), close button.
-- [ ] T170 [FR-060] [FR-061] [FR-062] [FR-069] Update `ContactCenter-APP/wwwroot/js/site.js`: settings overlay open/close logic, load settings on page load via `GET /api/Settings`, save on change via `PUT /api/Settings`. Disable "Voice Live" option with "Coming Soon" badge. Populate AI Voice dropdown and sync with saved settings.
-- [ ] T171 Update `ContactCenter-APP/wwwroot/css/site.css`: settings overlay styles (slide-in animation, dark theme matching sidebar, form controls styling, backdrop dimming).
+- [x] T168 [FR-060] Update `ContactCenter-APP/Pages/Shared/_Layout.cshtml`: add a gear icon (SVG) to the right side of the header bar, before the "Operations Dashboard" badge. Wire `onclick` to toggle settings overlay.
+- [x] T169 [FR-060] Update `ContactCenter-APP/Pages/Index.cshtml`: add settings overlay HTML â€” a right-side sliding panel with dark theme. Contains: Max Call Time slider/input (1-10 min), Voice API selector (radio buttons), AI Voice dropdown (Alloy/Echo/Fable/Onyx/Nova/Shimmer), close button.
+- [x] T170 [FR-060] [FR-061] [FR-062] [FR-069] Update `ContactCenter-APP/wwwroot/js/site.js`: settings overlay open/close logic, load settings on page load via `GET /api/Settings`, save on change via `PUT /api/Settings`. Disable "Voice Live" option with "Coming Soon" badge. Populate AI Voice dropdown and sync with saved settings.
+- [x] T171 Update `ContactCenter-APP/wwwroot/css/site.css`: settings overlay styles (slide-in animation, dark theme matching sidebar, form controls styling, backdrop dimming).
 
 ### Tests
 
-- [ ] T172 [P] Add `SettingsControllerContractTests` in `CallCenterPOC-API.Tests/Contract/`: test (a) `GET /api/Settings` returns 200 with default settings, (b) `PUT /api/Settings` with valid body returns 200 and persists, (c) `GET /healthz` returns 200 with status "healthy".
-- [ ] T173 [P] Add `CallSummaryServiceTests` in `CallCenterPOC-API.Tests/Unit/`: test summary generation with mock transcript entries. Test graceful null return on AOAI errors.
-- [ ] T174 [P] Update `CallHistoryContractTests`: test pagination — verify `GET /api/CallHistory?page=1&pageSize=5` returns at most 5 items with `totalCount`.
-- [ ] T175 Verify all existing tests still pass after base class refactoring (SentimentAnalysisTests, EmotionAnalysisTests, CampaignServiceTests).
+- [x] T172 [P] Add `SettingsControllerContractTests` in `CallCenterPOC-API.Tests/Contract/`: test (a) `GET /api/Settings` returns 200 with default settings, (b) `PUT /api/Settings` with valid body returns 200 and persists, (c) `GET /healthz` returns 200 with status "healthy".
+- [x] T173 [P] Add `CallSummaryServiceTests` in `CallCenterPOC-API.Tests/Unit/`: test summary generation with mock transcript entries. Test graceful null return on AOAI errors.
+- [x] T174 [P] Update `CallHistoryContractTests`: test pagination â€” verify `GET /api/CallHistory?page=1&pageSize=5` returns at most 5 items with `totalCount`.
+- [x] T175 Verify all existing tests still pass after base class refactoring (SentimentAnalysisTests, EmotionAnalysisTests, CampaignServiceTests).
 
 ### AI Voice Selection (FR-069)
 
-- [ ] T176 [FR-069] Update `ContactCenter-API/Models/OperatorSettings.cs`: add `SelectedVoice` property (string, default "alloy"). Valid values: alloy, echo, fable, onyx, nova, shimmer.
-- [ ] T177 [FR-069] Update `ContactCenter-API/Services/SettingsService.cs`: validate `SelectedVoice` on save — if the value is not one of the 6 valid voices, default to "alloy".
-- [ ] T178 [FR-069] Update `ContactCenter-API/Services/AzureOpenAIService.cs`: accept selected voice from settings. In `CreateAISessionAsync()`, map the string voice name to `ConversationVoice` (Alloy/Echo/Fable/Onyx/Nova/Shimmer). Replace the hardcoded `ConversationVoice.Alloy`.
-- [ ] T179 [FR-069] Update `ContactCenter-API/Services/CallService.cs` or `AcsMediaStreamingHandler`: pass the selected voice from `SettingsService` through to `AzureOpenAIService` when creating the AI session.
-- [ ] T180 [FR-069] Update `ContactCenter-APP/Pages/Index.cshtml`: add AI Voice dropdown (`<select>`) to the settings overlay with options for all 6 voices.
-- [ ] T181 [FR-069] Update `ContactCenter-APP/wwwroot/js/site.js`: populate AI Voice dropdown from saved settings on load, include `selectedVoice` in the `PUT /api/Settings` payload on save.
-- [ ] T182 [FR-069] Add tests: (a) SettingsControllerContractTests — PUT with valid voice returns 200, PUT with invalid voice defaults to alloy. (b) Verify GET returns `selectedVoice` field.
+- [x] T176 [FR-069] Update `ContactCenter-API/Models/OperatorSettings.cs`: add `SelectedVoice` property (string, default "alloy"). Valid values: alloy, echo, fable, onyx, nova, shimmer.
+- [x] T177 [FR-069] Update `ContactCenter-API/Services/SettingsService.cs`: validate `SelectedVoice` on save â€” if the value is not one of the 6 valid voices, default to "alloy".
+- [x] T178 [FR-069] Update `ContactCenter-API/Services/AzureOpenAIService.cs`: accept selected voice from settings. In `CreateAISessionAsync()`, map the string voice name to `ConversationVoice` (Alloy/Echo/Fable/Onyx/Nova/Shimmer). Replace the hardcoded `ConversationVoice.Alloy`.
+- [x] T179 [FR-069] Update `ContactCenter-API/Services/CallService.cs` or `AcsMediaStreamingHandler`: pass the selected voice from `SettingsService` through to `AzureOpenAIService` when creating the AI session.
+- [x] T180 [FR-069] Update `ContactCenter-APP/Pages/Index.cshtml`: add AI Voice dropdown (`<select>`) to the settings overlay with options for all 6 voices.
+- [x] T181 [FR-069] Update `ContactCenter-APP/wwwroot/js/site.js`: populate AI Voice dropdown from saved settings on load, include `selectedVoice` in the `PUT /api/Settings` payload on save.
+- [x] T182 [FR-069] Add tests: (a) SettingsControllerContractTests â€” PUT with valid voice returns 200, PUT with invalid voice defaults to alloy. (b) Verify GET returns `selectedVoice` field.
 
 **Checkpoint**: Swagger restricted to dev. Health check available. Analysis services share base class. History paginated. Post-call summary generated. Settings overlay functional with max call time (2 min default), Voice API selector, and AI Voice dropdown (6 voices, default Alloy).
 

@@ -24,6 +24,7 @@ namespace ContactCenterPOC.Services
         private readonly SentimentAnalysisService? _sentimentService;
         private readonly EmotionAnalysisService? _emotionService;
         private readonly ConcurrentDictionary<string, ActiveCall>? _activeCalls;
+        private readonly string _selectedVoice;
         private bool _sessionReady = false;
 
         public AzureOpenAIService(
@@ -35,7 +36,8 @@ namespace ContactCenterPOC.Services
             Func<string, Task>? hangUpCallback = null,
             SentimentAnalysisService? sentimentService = null,
             ConcurrentDictionary<string, ActiveCall>? activeCalls = null,
-            EmotionAnalysisService? emotionService = null)
+            EmotionAnalysisService? emotionService = null,
+            string? selectedVoice = null)
         {
             m_mediaStreaming = mediaStreaming;
             m_cts = new CancellationTokenSource();
@@ -47,6 +49,7 @@ namespace ContactCenterPOC.Services
             _sentimentService = sentimentService;
             _emotionService = emotionService;
             _activeCalls = activeCalls;
+            _selectedVoice = selectedVoice ?? "alloy";
 
             try
             {
@@ -72,7 +75,8 @@ namespace ContactCenterPOC.Services
             Func<string, Task>? hangUpCallback = null,
             SentimentAnalysisService? sentimentService = null,
             ConcurrentDictionary<string, ActiveCall>? activeCalls = null,
-            EmotionAnalysisService? emotionService = null)
+            EmotionAnalysisService? emotionService = null,
+            string? selectedVoice = null)
         {
             m_mediaStreaming = mediaStreaming;
             m_cts = new CancellationTokenSource();
@@ -84,6 +88,7 @@ namespace ContactCenterPOC.Services
             _sentimentService = sentimentService;
             _emotionService = emotionService;
             _activeCalls = activeCalls;
+            _selectedVoice = selectedVoice ?? "alloy";
 
             try
             {
@@ -136,7 +141,7 @@ namespace ContactCenterPOC.Services
             ConversationSessionOptions sessionOptions = new()
             {
                 Instructions = systemPrompt,
-                Voice = ConversationVoice.Alloy,
+                Voice = MapVoice(_selectedVoice),
                 InputAudioFormat = ConversationAudioFormat.Pcm16,
                 OutputAudioFormat = ConversationAudioFormat.Pcm16,
                 InputTranscriptionOptions = new()
@@ -147,8 +152,21 @@ namespace ContactCenterPOC.Services
             };
 
             await session.ConfigureSessionAsync(sessionOptions);
-            _logger.LogInformation("[AI-{CallId}] Session configured (voice=Alloy, format=PCM16, VAD enabled)", _callConnectionId);
+            _logger.LogInformation("[AI-{CallId}] Session configured (voice={Voice}, format=PCM16, VAD enabled)", _callConnectionId, _selectedVoice);
             return session;
+        }
+
+        private static ConversationVoice MapVoice(string voiceName)
+        {
+            return voiceName?.ToLowerInvariant() switch
+            {
+                "echo" => ConversationVoice.Echo,
+                "fable" => new ConversationVoice("fable"),
+                "onyx" => new ConversationVoice("onyx"),
+                "nova" => new ConversationVoice("nova"),
+                "shimmer" => ConversationVoice.Shimmer,
+                _ => ConversationVoice.Alloy
+            };
         }
 
         // Loop and wait for the AI response

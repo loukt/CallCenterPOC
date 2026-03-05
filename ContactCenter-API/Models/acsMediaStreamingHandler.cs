@@ -22,6 +22,7 @@ namespace ContactCenterPOC.Models
         private readonly SentimentAnalysisService? _sentimentService;
         private readonly EmotionAnalysisService? _emotionService;
         private readonly ConcurrentDictionary<string, ActiveCall>? _activeCalls;
+        private string _selectedVoice = "alloy";
 
         // Constructor to inject OpenAIClient, SignalR hub context, and call connection ID
         public AcsMediaStreamingHandler(
@@ -33,7 +34,8 @@ namespace ContactCenterPOC.Models
             Func<string, Task>? hangUpCallback = null,
             SentimentAnalysisService? sentimentService = null,
             ConcurrentDictionary<string, ActiveCall>? activeCalls = null,
-            EmotionAnalysisService? emotionService = null)
+            EmotionAnalysisService? emotionService = null,
+            string? selectedVoice = null)
         {
             m_webSocket = webSocket;
             m_configuration = configuration;
@@ -46,6 +48,7 @@ namespace ContactCenterPOC.Models
             _sentimentService = sentimentService;
             _emotionService = emotionService;
             _activeCalls = activeCalls;
+            _selectedVoice = selectedVoice ?? "alloy";
         }
 
         // Method to receive messages from WebSocket
@@ -58,7 +61,7 @@ namespace ContactCenterPOC.Models
             }
 
             // start forwarder to AI model
-            m_aiServiceHandler = new AzureOpenAIService(this, callContextPrompt, m_configuration, _logger, _hubContext, _callConnectionId, _hangUpCallback, _sentimentService, _activeCalls, _emotionService);
+            m_aiServiceHandler = new AzureOpenAIService(this, callContextPrompt, m_configuration, _logger, _hubContext, _callConnectionId, _hangUpCallback, _sentimentService, _activeCalls, _emotionService, _selectedVoice);
 
             try
             {

@@ -223,10 +223,26 @@ namespace ContactCenterPOC.Services
                     }
 
                     var callConnectionId = activeCall.CallConnectionId;
+
+                    // Read selected voice from settings
+                    var selectedVoice = "alloy";
+                    if (_settingsService != null)
+                    {
+                        try
+                        {
+                            var settings = await _settingsService.GetSettingsAsync();
+                            selectedVoice = settings.SelectedVoice ?? "alloy";
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to read voice setting, using default 'alloy'");
+                        }
+                    }
+
                     var handler = new AcsMediaStreamingHandler(
                         ws, _configuration, _logger, _hubContext,
                         callConnectionId, async (id) => await HangUpCall(id),
-                        _sentimentService, _activeCalls, _emotionService);
+                        _sentimentService, _activeCalls, _emotionService, selectedVoice);
                     _mediaHandlers[callConnectionId] = handler;
                     await handler.ProcessWebSocketAsync(activeCall.Prompt);
                 }

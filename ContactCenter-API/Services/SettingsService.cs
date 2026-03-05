@@ -74,6 +74,9 @@ namespace ContactCenterPOC.Services
                 if (settings.VoiceApiMode != "ChatGPT" && settings.VoiceApiMode != "VoiceLive")
                     settings.VoiceApiMode = "ChatGPT";
 
+                if (!OperatorSettings.ValidVoices.Contains(settings.SelectedVoice))
+                    settings.SelectedVoice = "alloy";
+
                 try
                 {
                     var containerClient = _blobServiceClient.GetBlobContainerClient(_containerName);
@@ -84,7 +87,7 @@ namespace ContactCenterPOC.Services
                         var json = JsonSerializer.Serialize(settings, _writeOptions);
                         using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json));
                         await blobClient.UploadAsync(stream, overwrite: true);
-                        _logger.LogInformation("Settings saved (MaxCallTime={MaxCallTime}min, VoiceApi={VoiceApi})", settings.MaxCallTimeMinutes, settings.VoiceApiMode);
+                        _logger.LogInformation("Settings saved (MaxCallTime={MaxCallTime}min, VoiceApi={VoiceApi}, Voice={Voice})", settings.MaxCallTimeMinutes, settings.VoiceApiMode, settings.SelectedVoice);
                     }
                     else
                     {

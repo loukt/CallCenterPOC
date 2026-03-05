@@ -1826,6 +1826,11 @@
                 radios.forEach(function (r) {
                     r.checked = (r.value === settings.voiceApiMode);
                 });
+
+                var voiceSelect = document.getElementById("settingsVoice");
+                if (voiceSelect && settings.selectedVoice) {
+                    voiceSelect.value = settings.selectedVoice;
+                }
             })
             .catch(function (err) {
                 console.error("Failed to load settings:", err);
@@ -1835,10 +1840,12 @@
     window.saveSettings = function () {
         var maxCallInput = document.getElementById("settingsMaxCallTime");
         var voiceRadio = document.querySelector('input[name="voiceApiMode"]:checked');
+        var voiceSelect = document.getElementById("settingsVoice");
 
         var payload = {
             maxCallTimeMinutes: parseFloat(maxCallInput.value) || 2,
-            voiceApiMode: voiceRadio ? voiceRadio.value : "ChatGPT"
+            voiceApiMode: voiceRadio ? voiceRadio.value : "ChatGPT",
+            selectedVoice: voiceSelect ? voiceSelect.value : "alloy"
         };
 
         var saveBtn = document.getElementById("saveSettingsBtn");
