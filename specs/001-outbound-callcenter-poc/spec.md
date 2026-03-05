@@ -496,6 +496,10 @@ The web application is redesigned as a professional, enterprise-grade call opera
 - Q: Should common analysis service code be refactored? → A: Yes. `SentimentAnalysisService`, `EmotionAnalysisService`, and `OperatorStyleAnalysisService` share ~200 lines of duplicate Azure OpenAI HTTP/auth code that should be extracted into a shared base class.
 - Q: Should the system generate a post-call summary? → A: Yes. After a call ends, generate a brief AI-powered summary of the conversation and persist it in the call history record.
 
+### Session 2026-03-05
+
+- Q: Should the operator be able to choose the AI voice used for calls? → A: Yes. The settings overlay should include a voice selector dropdown listing all available OpenAI Realtime voices (Alloy, Echo, Fable, Onyx, Nova, Shimmer). The selected voice is persisted via the settings API and applied when creating new AI conversation sessions. Default voice is Alloy.
+
 ### User Story 13: Operator Settings & Configuration (Priority: P2)
 
 **As an** operator,
@@ -510,8 +514,10 @@ The web application is redesigned as a professional, enterprise-grade call opera
 | 2 | The settings overlay is open | The operator adjusts the max call time slider/input | The value updates in real time and is persisted to the API |
 | 3 | The operator sets max call time to 3 minutes | They initiate a call | The call auto-terminates after 3 minutes instead of the default 2 |
 | 4 | The settings overlay shows Voice API selector | The operator sees "ChatGPT Realtime" selected | "Voice Live" option appears but is disabled/greyed out with a "Coming Soon" badge |
-| 5 | The operator closes the settings overlay | They click the X button or click outside the overlay | The overlay closes and the dashboard is fully interactive again |
-| 6 | The operator changed settings and refreshes the page | The page reloads | Settings are restored from the API (persisted server-side) |
+| 5 | The settings overlay shows an AI Voice dropdown | The operator opens the dropdown | They see all 6 available voices (Alloy, Echo, Fable, Onyx, Nova, Shimmer) and can select one |
+| 6 | The operator selects "Nova" as the AI voice | They save settings and initiate a new call | The AI agent speaks using the Nova voice |
+| 7 | The operator closes the settings overlay | They click the X button or click outside the overlay | The overlay closes and the dashboard is fully interactive again |
+| 8 | The operator changed settings and refreshes the page | The page reloads | Settings are restored from the API (persisted server-side) |
 
 ### User Story 14: Post-Call Summary Generation (Priority: P3)
 
@@ -536,6 +542,7 @@ The web application is redesigned as a professional, enterprise-grade call opera
 - **FR-060**: The dashboard header MUST include a gear icon that opens a settings overlay panel.
 - **FR-061**: The settings overlay MUST include a "Max Call Time" control (slider or numeric input) with a default of 2 minutes, minimum of 1 minute, and maximum of 10 minutes. Changes MUST be persisted via an API endpoint.
 - **FR-062**: The settings overlay MUST include a "Voice API" selector showing "ChatGPT Realtime" (active) and "Voice Live" (disabled, coming soon).
+- **FR-069**: The settings overlay MUST include an "AI Voice" dropdown listing all 6 available OpenAI Realtime voices: Alloy, Echo, Fable, Onyx, Nova, Shimmer. The default MUST be Alloy. The selected voice MUST be persisted via the settings API and applied when creating new `RealtimeConversationSession` instances in `AzureOpenAIService`.
 - **FR-063**: The API MUST expose a `GET /healthz` health check endpoint that returns 200 OK with basic service status.
 - **FR-064**: The `GET /api/CallHistory` endpoint MUST support pagination via `page` and `pageSize` query parameters (default page=1, pageSize=20). The response MUST include `totalCount`, `page`, `pageSize`, and `items` array.
 - **FR-065**: The API MUST expose `GET /api/Settings` and `PUT /api/Settings` endpoints for reading and updating operator settings (max call time, voice API preference). Settings MUST persist to Blob Storage.
@@ -550,3 +557,4 @@ The web application is redesigned as a professional, enterprise-grade call opera
 - **SC-031**: The `/healthz` endpoint responds within 100ms with a 200 status.
 - **SC-032**: Call history pagination loads the first page within 2 seconds, even with 100+ historical calls.
 - **SC-033**: Post-call summary is generated and visible in call detail within 10 seconds of call disconnect.
+- **SC-034**: After changing the AI voice in settings, the next call placed uses the newly selected voice.

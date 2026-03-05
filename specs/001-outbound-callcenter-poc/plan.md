@@ -396,6 +396,7 @@ Eight improvements in a single phase: five quick wins from code analysis and thr
 - **Settings overlay**: Dark-themed panel matching the sidebar style. Contains:
   - **Max Call Time**: Slider or numeric input (1-10 min, default 2 min). Persisted via `PUT /api/Settings`.
   - **Voice API**: Radio/toggle between "ChatGPT Realtime" (active) and "Voice Live" (disabled, "Coming Soon" badge).
+  - **AI Voice**: Dropdown selector listing all 6 OpenAI Realtime voices (Alloy, Echo, Fable, Onyx, Nova, Shimmer). Default: Alloy. Persisted via `PUT /api/Settings`. Applied when `AzureOpenAIService.CreateAISessionAsync()` configures the `ConversationSessionOptions.Voice`.
   - Close button (X) + click-outside-to-dismiss.
 - **Backend**: `SettingsController` with `GET /api/Settings` and `PUT /api/Settings`. Settings persisted as `settings.json` in Blob Storage.
 - **CallService integration**: Read max call time from `SettingsService` instead of hardcoded `TimeSpan.FromMinutes(5)`. Default 2 minutes.
@@ -412,8 +413,9 @@ Eight improvements in a single phase: five quick wins from code analysis and thr
 
 **Settings Persistence**:
 - `SettingsService`: singleton, reads/writes `settings.json` blob in the same container as campaigns/history
-- Settings model: `{ maxCallTimeMinutes: 2, voiceApi: "chatgpt-realtime" }`
+- Settings model: `{ maxCallTimeMinutes: 2, voiceApi: "chatgpt-realtime", selectedVoice: "alloy" }`
 - `CallService.InitiateCall()`: inject `SettingsService`, read `maxCallTimeMinutes` to set `CancelAfter`
+- `AzureOpenAIService.CreateAISessionAsync()`: read `selectedVoice` from settings and map to `ConversationVoice` enum (Alloy/Echo/Fable/Onyx/Nova/Shimmer). Falls back to Alloy for unrecognized values.
 
 **Post-Call Summary**:
 - Reuse the shared base class to call chat completions with a summarization prompt
@@ -437,6 +439,7 @@ Eight improvements in a single phase: five quick wins from code analysis and thr
 | `ContactCenter-API/Models/CallRecord.cs` | Add `CallSummary` field |
 | `ContactCenter-API/Models/Settings.cs` | New: settings model |
 | `ContactCenter-API/Services/CallService.cs` | Use `SettingsService` for max call time |
+| `ContactCenter-API/Services/AzureOpenAIService.cs` | Read selected voice from settings; map to `ConversationVoice` enum |
 | `ContactCenter-APP/Pages/Shared/_Layout.cshtml` | Add gear icon to header |
 | `ContactCenter-APP/Pages/Index.cshtml` | Add settings overlay markup |
 | `ContactCenter-APP/wwwroot/js/site.js` | Settings overlay logic, pagination, summary display |

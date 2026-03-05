@@ -827,7 +827,7 @@ Work sequentially: Phase 1 â†’ 2 â†’ 3 â†’ 4 â†’ 5 â†’ 
 
 ### Settings Overlay — Backend
 
-- [ ] T163 [FR-065] Create `ContactCenter-API/Models/Settings.cs`: `OperatorSettings` model with `MaxCallTimeMinutes` (int, default 2), `VoiceApi` (string, default "chatgpt-realtime").
+- [ ] T163 [FR-065] Create `ContactCenter-API/Models/Settings.cs`: `OperatorSettings` model with `MaxCallTimeMinutes` (int, default 2), `VoiceApi` (string, default "chatgpt-realtime"), `SelectedVoice` (string, default "alloy"). Valid voice values: alloy, echo, fable, onyx, nova, shimmer.
 - [ ] T164 [FR-065] Create `ContactCenter-API/Services/SettingsService.cs`: singleton service that reads/writes `settings.json` in the configured Blob container. Methods: `GetSettingsAsync()`, `SaveSettingsAsync(OperatorSettings)`. Cache in memory, invalidate on save.
 - [ ] T165 [FR-065] Create `ContactCenter-API/Controllers/SettingsController.cs`: `GET /api/Settings` returns current settings. `PUT /api/Settings` accepts updated settings body and persists via `SettingsService`.
 - [ ] T166 [FR-061] Update `ContactCenter-API/Services/CallService.cs`: inject `SettingsService`. In `InitiateCall()`, read `MaxCallTimeMinutes` from settings instead of hardcoded `TimeSpan.FromMinutes(5)`. Default to 2 minutes if settings unavailable.
@@ -836,8 +836,8 @@ Work sequentially: Phase 1 â†’ 2 â†’ 3 â†’ 4 â†’ 5 â†’ 
 ### Settings Overlay — Frontend
 
 - [ ] T168 [FR-060] Update `ContactCenter-APP/Pages/Shared/_Layout.cshtml`: add a gear icon (SVG) to the right side of the header bar, before the "Operations Dashboard" badge. Wire `onclick` to toggle settings overlay.
-- [ ] T169 [FR-060] Update `ContactCenter-APP/Pages/Index.cshtml`: add settings overlay HTML — a right-side sliding panel with dark theme. Contains: Max Call Time slider/input (1-10 min), Voice API selector (radio buttons), close button.
-- [ ] T170 [FR-060] [FR-061] [FR-062] Update `ContactCenter-APP/wwwroot/js/site.js`: settings overlay open/close logic, load settings on page load via `GET /api/Settings`, save on change via `PUT /api/Settings`. Disable "Voice Live" option with "Coming Soon" badge.
+- [ ] T169 [FR-060] Update `ContactCenter-APP/Pages/Index.cshtml`: add settings overlay HTML — a right-side sliding panel with dark theme. Contains: Max Call Time slider/input (1-10 min), Voice API selector (radio buttons), AI Voice dropdown (Alloy/Echo/Fable/Onyx/Nova/Shimmer), close button.
+- [ ] T170 [FR-060] [FR-061] [FR-062] [FR-069] Update `ContactCenter-APP/wwwroot/js/site.js`: settings overlay open/close logic, load settings on page load via `GET /api/Settings`, save on change via `PUT /api/Settings`. Disable "Voice Live" option with "Coming Soon" badge. Populate AI Voice dropdown and sync with saved settings.
 - [ ] T171 Update `ContactCenter-APP/wwwroot/css/site.css`: settings overlay styles (slide-in animation, dark theme matching sidebar, form controls styling, backdrop dimming).
 
 ### Tests
@@ -847,5 +847,15 @@ Work sequentially: Phase 1 â†’ 2 â†’ 3 â†’ 4 â†’ 5 â†’ 
 - [ ] T174 [P] Update `CallHistoryContractTests`: test pagination — verify `GET /api/CallHistory?page=1&pageSize=5` returns at most 5 items with `totalCount`.
 - [ ] T175 Verify all existing tests still pass after base class refactoring (SentimentAnalysisTests, EmotionAnalysisTests, CampaignServiceTests).
 
-**Checkpoint**: Swagger restricted to dev. Health check available. Analysis services share base class. History paginated. Post-call summary generated. Settings overlay functional with max call time (2 min default) and Voice API selector.
+### AI Voice Selection (FR-069)
+
+- [ ] T176 [FR-069] Update `ContactCenter-API/Models/OperatorSettings.cs`: add `SelectedVoice` property (string, default "alloy"). Valid values: alloy, echo, fable, onyx, nova, shimmer.
+- [ ] T177 [FR-069] Update `ContactCenter-API/Services/SettingsService.cs`: validate `SelectedVoice` on save — if the value is not one of the 6 valid voices, default to "alloy".
+- [ ] T178 [FR-069] Update `ContactCenter-API/Services/AzureOpenAIService.cs`: accept selected voice from settings. In `CreateAISessionAsync()`, map the string voice name to `ConversationVoice` (Alloy/Echo/Fable/Onyx/Nova/Shimmer). Replace the hardcoded `ConversationVoice.Alloy`.
+- [ ] T179 [FR-069] Update `ContactCenter-API/Services/CallService.cs` or `AcsMediaStreamingHandler`: pass the selected voice from `SettingsService` through to `AzureOpenAIService` when creating the AI session.
+- [ ] T180 [FR-069] Update `ContactCenter-APP/Pages/Index.cshtml`: add AI Voice dropdown (`<select>`) to the settings overlay with options for all 6 voices.
+- [ ] T181 [FR-069] Update `ContactCenter-APP/wwwroot/js/site.js`: populate AI Voice dropdown from saved settings on load, include `selectedVoice` in the `PUT /api/Settings` payload on save.
+- [ ] T182 [FR-069] Add tests: (a) SettingsControllerContractTests — PUT with valid voice returns 200, PUT with invalid voice defaults to alloy. (b) Verify GET returns `selectedVoice` field.
+
+**Checkpoint**: Swagger restricted to dev. Health check available. Analysis services share base class. History paginated. Post-call summary generated. Settings overlay functional with max call time (2 min default), Voice API selector, and AI Voice dropdown (6 voices, default Alloy).
 
