@@ -30,12 +30,18 @@
                         <span class="radio-label">ChatGPT Realtime</span>
                         <span class="radio-badge active-badge">Active</span>
                     </label>
-                    <label class="settings-radio-option disabled-option">
-                        <input type="radio" name="voiceApiMode" value="VoiceLive" disabled>
+                    <label class="settings-radio-option" id="voiceLiveOption">
+                        <input type="radio" name="voiceApiMode" value="VoiceLive">
                         <span class="radio-label">Voice Live</span>
-                        <span class="radio-badge coming-soon-badge">Coming Soon</span>
+                        <span class="radio-badge not-configured-badge d-none" id="voiceLiveNotConfiguredBadge">Not Configured</span>
                     </label>
                 </div>
+            </div>
+            <div class="settings-group d-none" id="voiceLiveModelGroup">
+                <label class="settings-label" for="settingsVoiceLiveModel">AI Model</label>
+                <p class="settings-description">Select the AI model used for VoiceLive calls.</p>
+                <select class="form-control form-control-sm settings-input" id="settingsVoiceLiveModel">
+                </select>
             </div>
             <div class="settings-group">
                 <label class="settings-label" for="settingsVoice">AI Voice</label>
@@ -47,6 +53,14 @@
                     <option value="onyx">Onyx</option>
                     <option value="nova">Nova</option>
                     <option value="shimmer">Shimmer</option>
+                </select>
+            </div>
+            <div class="settings-group d-none" id="transcriptionSourceGroup">
+                <label class="settings-label" for="transcriptionSource">Transcription Source</label>
+                <p class="settings-description">Choose how speech is transcribed during VoiceLive calls.</p>
+                <select class="form-control form-control-sm settings-input" id="transcriptionSource">
+                    <option value="BuiltIn" selected>Built-in (VoiceLive)</option>
+                    <option value="SeparateSTT">Separate STT Pipeline</option>
                 </select>
             </div>
         </div>

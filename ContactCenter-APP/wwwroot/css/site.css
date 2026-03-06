@@ -1601,6 +1601,31 @@ html, body {
   color: #eab308;
 }
 
+.not-configured-badge {
+  background: rgba(239,68,68,0.15);
+  color: #ef4444;
+}
+
+.reconnect-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(234,179,8,0.15);
+  border: 1px solid rgba(234,179,8,0.3);
+  border-radius: 6px;
+  color: #eab308;
+  font-size: 0.82rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.reconnect-banner.failed {
+  background: rgba(239,68,68,0.15);
+  border-color: rgba(239,68,68,0.3);
+  color: #ef4444;
+}
+
 .settings-footer {
   display: flex;
   justify-content: flex-end;

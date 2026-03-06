@@ -27,6 +27,7 @@ namespace ContactCenterPOC.Services
         private readonly OperatorStyleAnalysisService? _operatorStyleService;
         private readonly CallSummaryService? _callSummaryService;
         private readonly SettingsService? _settingsService;
+        private readonly VoiceLiveConfig _voiceLiveConfig;
 
         // Thread-safe dictionaries for concurrent call handling
         private readonly ConcurrentDictionary<string, ActiveCall> _activeCalls = new();
@@ -34,7 +35,7 @@ namespace ContactCenterPOC.Services
 
         public ConcurrentDictionary<string, ActiveCall> ActiveCalls => _activeCalls;
 
-        public CallService(IConfiguration configuration, ILogger<CallService> logger, IHubContext<TranscriptHub> hubContext, CampaignService campaignService, CallHistoryService callHistoryService, SentimentAnalysisService? sentimentService = null, EmotionAnalysisService? emotionService = null, OperatorStyleAnalysisService? operatorStyleService = null, CallSummaryService? callSummaryService = null, SettingsService? settingsService = null)
+        public CallService(IConfiguration configuration, ILogger<CallService> logger, IHubContext<TranscriptHub> hubContext, CampaignService campaignService, CallHistoryService callHistoryService, VoiceLiveConfig voiceLiveConfig, SentimentAnalysisService? sentimentService = null, EmotionAnalysisService? emotionService = null, OperatorStyleAnalysisService? operatorStyleService = null, CallSummaryService? callSummaryService = null, SettingsService? settingsService = null)
         {
             _logger = logger;
             _configuration = configuration;
@@ -46,6 +47,7 @@ namespace ContactCenterPOC.Services
             _operatorStyleService = operatorStyleService;
             _callSummaryService = callSummaryService;
             _settingsService = settingsService;
+            _voiceLiveConfig = voiceLiveConfig;
             var connectionString = configuration["AzureCommunicationServices:ConnectionString"];
             _callbackUri = configuration["CallbackUrl"] ?? throw new InvalidOperationException("CallbackUrl not configured");
             _callAutomationClient = new CallAutomationClient(connectionString);
@@ -159,18 +161,38 @@ namespace ContactCenterPOC.Services
 
                 // Set up auto-terminate timeout from settings (default 2 minutes)
                 var maxCallMinutes = 2.0;
+                // Freeze VoiceApiMode and VoiceLiveModel from current settings (FR-014)
+                var frozenVoiceApiMode = "ChatGPT";
+                var frozenVoiceLiveModel = "gpt-4o";
+                var frozenVoiceLiveVoice = "en-US-Ava:DragonHDLatestNeural";
+                var frozenSelectedVoice = "alloy";
                 if (_settingsService != null)
                 {
                     try
                     {
                         var settings = await _settingsService.GetSettingsAsync();
                         maxCallMinutes = settings.MaxCallTimeMinutes;
+                        frozenVoiceApiMode = settings.VoiceApiMode;
+                        frozenVoiceLiveModel = settings.VoiceLiveModel;
+                        frozenVoiceLiveVoice = settings.SelectedVoiceLiveVoice;
+                        frozenSelectedVoice = settings.SelectedVoice;
                     }
                     catch (Exception ex)
                     {
                         _logger.LogWarning(ex, "Failed to load settings for max call time, using default {Default}min", maxCallMinutes);
                     }
                 }
+
+                // Freeze engine settings on the ActiveCall for the call's duration
+                activeCall.VoiceApiMode = frozenVoiceApiMode;
+                activeCall.VoiceLiveModel = frozenVoiceApiMode == "VoiceLive" ? frozenVoiceLiveModel : null;
+                activeCall.VoiceLiveVoice = frozenVoiceApiMode == "VoiceLive" ? frozenVoiceLiveVoice : null;
+
+                // FR-015: Log engine type, voice, and model when call starts
+                _logger.LogInformation("Call {CallConnectionId} initiated: engine={Engine}, voice={Voice}, model={Model}",
+                    callConnectionId, frozenVoiceApiMode,
+                    frozenVoiceApiMode == "VoiceLive" ? frozenVoiceLiveVoice : frozenSelectedVoice,
+                    frozenVoiceApiMode == "VoiceLive" ? frozenVoiceLiveModel : "N/A");
                 activeCall.CancellationTokenSource.CancelAfter(TimeSpan.FromMinutes(maxCallMinutes));
                 activeCall.CancellationTokenSource.Token.Register(async () =>
                 {
@@ -224,8 +246,26 @@ namespace ContactCenterPOC.Services
 
                     var callConnectionId = activeCall.CallConnectionId;
 
-                    // Read selected voice from settings
+                    // FR-010/FR-013: Check VoiceLive configuration before proceeding
+                    if (activeCall.VoiceApiMode == "VoiceLive" && !_voiceLiveConfig.IsConfigured)
+                    {
+                        _logger.LogWarning("VoiceLive call attempted but endpoint not configured for {CallConnectionId}", callConnectionId);
+                        await _hubContext.Clients.Group(callConnectionId)
+                            .SendAsync("CallStatusChanged", new
+                            {
+                                callConnectionId = callConnectionId,
+                                status = "Failed",
+                                message = "VoiceLive is not configured. Please contact your administrator."
+                            });
+                        await HangUpCall(callConnectionId);
+                        return;
+                    }
+
+                    // Read voice and VoiceLive settings from frozen ActiveCall state
                     var selectedVoice = "alloy";
+                    var voiceApiMode = activeCall.VoiceApiMode;
+                    var voiceLiveModel = activeCall.VoiceLiveModel ?? "gpt-4o";
+                    var voiceLiveVoice = activeCall.VoiceLiveVoice ?? "en-US-Ava:DragonHDLatestNeural";
                     if (_settingsService != null)
                     {
                         try
@@ -235,14 +275,15 @@ namespace ContactCenterPOC.Services
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogWarning(ex, "Failed to read voice setting, using default 'alloy'");
+                            _logger.LogWarning(ex, "Failed to read voice setting, using defaults");
                         }
                     }
 
                     var handler = new AcsMediaStreamingHandler(
                         ws, _configuration, _logger, _hubContext,
                         callConnectionId, async (id) => await HangUpCall(id),
-                        _sentimentService, _activeCalls, _emotionService, selectedVoice);
+                        _sentimentService, _activeCalls, _emotionService, selectedVoice,
+                        voiceApiMode, voiceLiveModel, voiceLiveVoice, _voiceLiveConfig);
                     _mediaHandlers[callConnectionId] = handler;
                     await handler.ProcessWebSocketAsync(activeCall.Prompt);
                 }
@@ -372,7 +413,10 @@ namespace ContactCenterPOC.Services
                     OperatorStyleTraits = operatorTraits,
                     TranscriptEntries = entries,
                     StartedAt = activeCall.StartedAt,
-                    EndedAt = endedAt
+                    EndedAt = endedAt,
+                    VoiceApiMode = activeCall.VoiceApiMode,
+                    VoiceLiveModel = activeCall.VoiceLiveModel,
+                    VoiceLiveVoice = activeCall.VoiceLiveVoice
                 };
 
                 await _callHistoryService.SaveCallRecordAsync(callRecord);

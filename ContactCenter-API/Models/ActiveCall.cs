@@ -6,7 +6,8 @@ namespace ContactCenterPOC.Models
         Ringing,
         Connected,
         Disconnected,
-        Failed
+        Failed,
+        Reconnecting
     }
 
     public class ActiveCall
@@ -23,5 +24,11 @@ namespace ContactCenterPOC.Models
         public string? RecordingId { get; set; }
         public List<TranscriptEntry> TranscriptEntries { get; set; } = new();
         public CancellationTokenSource CancellationTokenSource { get; set; } = new();
+
+        // VoiceLive-specific fields (frozen at call start per FR-014)
+        public string VoiceApiMode { get; set; } = "ChatGPT";
+        public string? VoiceLiveModel { get; set; }
+        public string? VoiceLiveVoice { get; set; }
+        public int ReconnectAttempts { get; set; } = 0;
     }
 }

@@ -44,5 +44,24 @@ namespace CallCenterPOC_API.Tests.Contract
             Assert.Equal("healthy", root.GetProperty("status").GetString());
             Assert.True(root.TryGetProperty("timestamp", out _), "Response should have 'timestamp'");
         }
+
+        [Fact]
+        public async Task Healthz_ShouldIncludeVoiceLiveStatus()
+        {
+            // Act
+            var response = await _client.GetAsync("/healthz");
+
+            // Assert
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            Assert.True(root.TryGetProperty("voiceLive", out var voiceLive), "Response should have 'voiceLive'");
+            Assert.True(voiceLive.TryGetProperty("configured", out var configured), "voiceLive should have 'configured'");
+            Assert.False(configured.GetBoolean(), "Without config, voiceLive.configured should be false");
+            Assert.True(voiceLive.TryGetProperty("endpoint", out _), "voiceLive should have 'endpoint'");
+        }
     }
 }

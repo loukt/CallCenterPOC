@@ -79,7 +79,7 @@ curl https://<your-api>/healthz
 Expected response when configured:
 ```json
 {
-  "status": "Healthy",
+  "status": "healthy",
   "voiceLive": {
     "configured": true,
     "endpoint": "*.services.ai.azure.com"

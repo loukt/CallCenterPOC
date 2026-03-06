@@ -77,6 +77,27 @@ namespace ContactCenterPOC.Services
                 if (!OperatorSettings.ValidVoices.Contains(settings.SelectedVoice))
                     settings.SelectedVoice = "alloy";
 
+                // VoiceLive-specific validation (mode-conditional)
+                if (settings.VoiceApiMode == "VoiceLive")
+                {
+                    if (!OperatorSettings.ValidVoiceLiveModels.Contains(settings.VoiceLiveModel))
+                    {
+                        _logger.LogWarning("Unknown VoiceLiveModel '{Model}', defaulting to 'gpt-4o'", settings.VoiceLiveModel);
+                        settings.VoiceLiveModel = "gpt-4o";
+                    }
+
+                    if (!VoiceLiveVoices.ValidNames.Contains(settings.SelectedVoiceLiveVoice))
+                    {
+                        _logger.LogWarning("Unknown VoiceLive voice '{Voice}', defaulting to 'en-US-Ava:DragonHDLatestNeural'", settings.SelectedVoiceLiveVoice);
+                        settings.SelectedVoiceLiveVoice = "en-US-Ava:DragonHDLatestNeural";
+                    }
+
+                    if (!OperatorSettings.ValidTranscriptionModes.Contains(settings.TranscriptionMode))
+                    {
+                        settings.TranscriptionMode = "BuiltIn";
+                    }
+                }
+
                 try
                 {
                     var containerClient = _blobServiceClient.GetBlobContainerClient(_containerName);

@@ -13,7 +13,8 @@ namespace ContactCenterPOC.Models
         private WebSocket m_webSocket;
         private CancellationTokenSource m_cts;
         private MemoryStream m_buffer;
-        private AzureOpenAIService m_aiServiceHandler;
+        private AzureOpenAIService? m_aiServiceHandler;
+        private VoiceLiveService? m_vlServiceHandler;
         private IConfiguration m_configuration;
         private readonly ILogger<CallService> _logger;
         private readonly IHubContext<TranscriptHub> _hubContext;
@@ -23,8 +24,12 @@ namespace ContactCenterPOC.Models
         private readonly EmotionAnalysisService? _emotionService;
         private readonly ConcurrentDictionary<string, ActiveCall>? _activeCalls;
         private string _selectedVoice = "alloy";
+        private readonly string _voiceApiMode;
+        private readonly string? _voiceLiveModel;
+        private readonly string? _selectedVoiceLiveVoice;
+        private readonly VoiceLiveConfig? _voiceLiveConfig;
 
-        // Constructor to inject OpenAIClient, SignalR hub context, and call connection ID
+        // Constructor to inject dependencies and call connection ID
         public AcsMediaStreamingHandler(
             WebSocket webSocket,
             IConfiguration configuration,
@@ -35,7 +40,11 @@ namespace ContactCenterPOC.Models
             SentimentAnalysisService? sentimentService = null,
             ConcurrentDictionary<string, ActiveCall>? activeCalls = null,
             EmotionAnalysisService? emotionService = null,
-            string? selectedVoice = null)
+            string? selectedVoice = null,
+            string voiceApiMode = "ChatGPT",
+            string? voiceLiveModel = null,
+            string? selectedVoiceLiveVoice = null,
+            VoiceLiveConfig? voiceLiveConfig = null)
         {
             m_webSocket = webSocket;
             m_configuration = configuration;
@@ -49,9 +58,13 @@ namespace ContactCenterPOC.Models
             _emotionService = emotionService;
             _activeCalls = activeCalls;
             _selectedVoice = selectedVoice ?? "alloy";
+            _voiceApiMode = voiceApiMode;
+            _voiceLiveModel = voiceLiveModel;
+            _selectedVoiceLiveVoice = selectedVoiceLiveVoice;
+            _voiceLiveConfig = voiceLiveConfig;
         }
 
-        // Method to receive messages from WebSocket
+        // Method to receive messages from WebSocket — dispatches to VoiceLive or OpenAI
         public async Task ProcessWebSocketAsync(string callContextPrompt)
         {
             
@@ -60,33 +73,71 @@ namespace ContactCenterPOC.Models
                 return;
             }
 
-            // start forwarder to AI model
-            m_aiServiceHandler = new AzureOpenAIService(this, callContextPrompt, m_configuration, _logger, _hubContext, _callConnectionId, _hangUpCallback, _sentimentService, _activeCalls, _emotionService, _selectedVoice);
+            // Dispatch to VoiceLive or OpenAI based on VoiceApiMode (simple if/switch per Constitution I)
+            if (_voiceApiMode == "VoiceLive" && _voiceLiveConfig != null && _voiceLiveConfig.IsConfigured)
+            {
+                _logger.LogInformation("[MediaStream-{CallId}] Dispatching to VoiceLiveService (model={Model}, voice={Voice})",
+                    _callConnectionId, _voiceLiveModel, _selectedVoiceLiveVoice);
+                m_vlServiceHandler = new VoiceLiveService(this, callContextPrompt, _voiceLiveConfig, _logger, _hubContext,
+                    _callConnectionId, _voiceLiveModel ?? "gpt-4o", _selectedVoiceLiveVoice,
+                    _hangUpCallback, _sentimentService, _activeCalls, _emotionService);
 
-            try
-            {
-                m_aiServiceHandler.StartConversation();
-                await StartReceivingFromAcsMediaWebSocket();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogInformation($" at MediaStreamHandler Process websocket Exception -> {ex}");
-            }
-            finally
-            {
-                m_aiServiceHandler.Close();
-                this.Close();
-
-                // Graceful call termination on WebSocket drop (T035)
-                if (_hangUpCallback != null)
+                try
                 {
-                    try
+                    m_vlServiceHandler.StartConversation();
+                    await StartReceivingFromAcsMediaWebSocket();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogInformation($" at MediaStreamHandler Process websocket Exception -> {ex}");
+                }
+                finally
+                {
+                    m_vlServiceHandler.Close();
+                    this.Close();
+
+                    if (_hangUpCallback != null)
                     {
-                        await _hangUpCallback(_callConnectionId);
+                        try
+                        {
+                            await _hangUpCallback(_callConnectionId);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Error during hang-up callback for call {CallConnectionId}", _callConnectionId);
+                        }
                     }
-                    catch (Exception ex)
+                }
+            }
+            else
+            {
+                // Default: OpenAI Realtime path
+                m_aiServiceHandler = new AzureOpenAIService(this, callContextPrompt, m_configuration, _logger, _hubContext, _callConnectionId, _hangUpCallback, _sentimentService, _activeCalls, _emotionService, _selectedVoice);
+
+                try
+                {
+                    m_aiServiceHandler.StartConversation();
+                    await StartReceivingFromAcsMediaWebSocket();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogInformation($" at MediaStreamHandler Process websocket Exception -> {ex}");
+                }
+                finally
+                {
+                    m_aiServiceHandler.Close();
+                    this.Close();
+
+                    if (_hangUpCallback != null)
                     {
-                        _logger.LogError(ex, "Error during hang-up callback for call {CallConnectionId}", _callConnectionId);
+                        try
+                        {
+                            await _hangUpCallback(_callConnectionId);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Error during hang-up callback for call {CallConnectionId}", _callConnectionId);
+                        }
                     }
                 }
             }
@@ -101,7 +152,7 @@ namespace ContactCenterPOC.Models
                 return;
             }
 
-            // start forwarder to AI model
+            // No-prompt overload always uses OpenAI path
             m_aiServiceHandler = new AzureOpenAIService(this, m_configuration, _logger, _hubContext, _callConnectionId, _hangUpCallback, _sentimentService, _activeCalls, _emotionService);
 
             try
@@ -118,7 +169,6 @@ namespace ContactCenterPOC.Models
                 m_aiServiceHandler.Close();
                 this.Close();
 
-                // Graceful call termination on WebSocket drop (T035)
                 if (_hangUpCallback != null)
                 {
                     try
@@ -170,7 +220,14 @@ namespace ContactCenterPOC.Models
                 {
                     using (var ms = new MemoryStream(audioData.Data))
                     {
-                        await m_aiServiceHandler.SendAudioToExternalAI(ms);
+                        if (m_vlServiceHandler != null)
+                        {
+                            await m_vlServiceHandler.SendAudioToExternalAI(ms);
+                        }
+                        else if (m_aiServiceHandler != null)
+                        {
+                            await m_aiServiceHandler.SendAudioToExternalAI(ms);
+                        }
                     }
                 }
             }

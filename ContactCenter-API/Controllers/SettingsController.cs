@@ -9,17 +9,31 @@ namespace ContactCenterPOC.Controllers
     public class SettingsController : ControllerBase
     {
         private readonly SettingsService _settingsService;
+        private readonly VoiceLiveConfig _voiceLiveConfig;
 
-        public SettingsController(SettingsService settingsService)
+        public SettingsController(SettingsService settingsService, VoiceLiveConfig voiceLiveConfig)
         {
             _settingsService = settingsService;
+            _voiceLiveConfig = voiceLiveConfig;
         }
 
         [HttpGet]
         public async Task<IActionResult> GetSettings()
         {
             var settings = await _settingsService.GetSettingsAsync();
-            return Ok(settings);
+            var response = new
+            {
+                settings.MaxCallTimeMinutes,
+                settings.VoiceApiMode,
+                settings.SelectedVoice,
+                settings.TranscriptionMode,
+                settings.VoiceLiveModel,
+                settings.SelectedVoiceLiveVoice,
+                VoiceLiveConfigured = _voiceLiveConfig.IsConfigured,
+                AvailableVoiceLiveVoices = VoiceLiveVoices.All,
+                AvailableVoiceLiveModels = OperatorSettings.ValidVoiceLiveModels.ToList()
+            };
+            return Ok(response);
         }
 
         [HttpPut]
@@ -31,7 +45,19 @@ namespace ContactCenterPOC.Controllers
             }
 
             var saved = await _settingsService.SaveSettingsAsync(settings);
-            return Ok(saved);
+            var response = new
+            {
+                saved.MaxCallTimeMinutes,
+                saved.VoiceApiMode,
+                saved.SelectedVoice,
+                saved.TranscriptionMode,
+                saved.VoiceLiveModel,
+                saved.SelectedVoiceLiveVoice,
+                VoiceLiveConfigured = _voiceLiveConfig.IsConfigured,
+                AvailableVoiceLiveVoices = VoiceLiveVoices.All,
+                AvailableVoiceLiveModels = OperatorSettings.ValidVoiceLiveModels.ToList()
+            };
+            return Ok(response);
         }
     }
 }

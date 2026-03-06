@@ -19,9 +19,9 @@
 
 **Purpose**: Install VoiceLive dependency, add configuration binding, prepare project structure
 
-- [ ] T001 Install Azure.AI.VoiceLive 1.0.0 NuGet package in ContactCenter-API/ContactCenter-API.csproj
-- [ ] T002 [P] Add VoiceLive configuration section to ContactCenter-API/appsettings.json
-- [ ] T003 [P] Create VoiceLiveConfig options class in ContactCenter-API/Models/VoiceLiveConfig.cs and bind from configuration in ContactCenter-API/Program.cs
+- [X] T001 Install Azure.AI.VoiceLive 1.0.0 NuGet package in ContactCenter-API/ContactCenter-API.csproj
+- [X] T002 [P] Add VoiceLive configuration section to ContactCenter-API/appsettings.json
+- [X] T003 [P] Create VoiceLiveConfig options class in ContactCenter-API/Models/VoiceLiveConfig.cs and bind from configuration in ContactCenter-API/Program.cs
 
 **Details**:
 
@@ -37,12 +37,12 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T004 [P] Create VoiceLiveVoices static catalog with Dragon HD voices grouped by locale in ContactCenter-API/Models/VoiceLiveVoices.cs
-- [ ] T005 [P] Add TranscriptionMode, VoiceLiveModel, SelectedVoiceLiveVoice fields and ValidVoiceLiveModels/ValidTranscriptionModes static sets to ContactCenter-API/Models/OperatorSettings.cs
-- [ ] T006 [P] Add VoiceApiMode, VoiceLiveModel, ReconnectAttempts fields and Reconnecting enum value to CallStatus in ContactCenter-API/Models/ActiveCall.cs
-- [ ] T007 [P] Add VoiceApiMode, VoiceLiveModel, VoiceLiveVoice fields to ContactCenter-API/Models/CallRecord.cs
-- [ ] T008 Update SettingsService validation to handle new VoiceLive fields (mode-conditional validation) in ContactCenter-API/Services/SettingsService.cs
-- [ ] T009 Update SettingsController GET response to include voiceLiveConfigured, availableVoiceLiveVoices, availableVoiceLiveModels metadata in ContactCenter-API/Controllers/SettingsController.cs
+- [X] T004 [P] Create VoiceLiveVoices static catalog with Dragon HD voices grouped by locale in ContactCenter-API/Models/VoiceLiveVoices.cs
+- [X] T005 [P] Add TranscriptionMode, VoiceLiveModel, SelectedVoiceLiveVoice fields and ValidVoiceLiveModels/ValidTranscriptionModes static sets to ContactCenter-API/Models/OperatorSettings.cs
+- [X] T006 [P] Add VoiceApiMode, VoiceLiveModel, ReconnectAttempts fields and Reconnecting enum value to CallStatus in ContactCenter-API/Models/ActiveCall.cs
+- [X] T007 [P] Add VoiceApiMode, VoiceLiveModel, VoiceLiveVoice fields to ContactCenter-API/Models/CallRecord.cs
+- [X] T008 Update SettingsService validation to handle new VoiceLive fields (mode-conditional validation) in ContactCenter-API/Services/SettingsService.cs
+- [X] T009 Update SettingsController GET response to include voiceLiveConfigured, availableVoiceLiveVoices, availableVoiceLiveModels metadata in ContactCenter-API/Controllers/SettingsController.cs
 
 **Details**:
 
@@ -67,16 +67,16 @@
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Create VoiceLiveService with session lifecycle (VoiceLiveClient, StartSessionAsync, ConfigureSessionAsync, audio send/receive loop, dispose) in ContactCenter-API/Services/VoiceLiveService.cs
-- [ ] T011 [US1] Register VoiceLiveService in DI container in ContactCenter-API/Program.cs
-- [ ] T012 [US1] Update acsMediaStreamingHandler to dispatch to VoiceLiveService or AzureOpenAIService based on VoiceApiMode in ContactCenter-API/Models/acsMediaStreamingHandler.cs
-- [ ] T013 [US1] Update CallService to freeze VoiceApiMode/VoiceLiveModel at call start (FR-014) and pass to media streaming handler in ContactCenter-API/Services/CallService.cs
-- [ ] T014 [US1] Implement reconnection logic in VoiceLiveService with exponential backoff (1s, 2s, 4s — max 3 attempts) in ContactCenter-API/Services/VoiceLiveService.cs
-- [ ] T015 [US1] Emit Reconnecting and ReconnectFailed SignalR events via TranscriptHub during VoiceLive reconnection in ContactCenter-API/Services/VoiceLiveService.cs
-- [ ] T016 [US1] Add VoiceLive engine and voice logging per call (FR-015) in ContactCenter-API/Services/CallService.cs
-- [ ] T017 [P] [US1] Enable VoiceLive radio button, implement Not Configured vs enabled badge logic, and add AI Model dropdown (FR-001, FR-013, FR-021) in ContactCenter-APP/Pages/Index.cshtml
-- [ ] T018 [US1] Update site.js to handle VoiceLive mode selection, model dropdown population/save/load, and toggle mode-specific UI sections in ContactCenter-APP/wwwroot/js/site.js
-- [ ] T019 [US1] Update site.js to display reconnection status indicator ("Reconnecting… attempt N/3") and enable operator abort during reconnect (FR-019, FR-020) in ContactCenter-APP/wwwroot/js/site.js
+- [X] T010 [US1] Create VoiceLiveService with session lifecycle (VoiceLiveClient, StartSessionAsync, ConfigureSessionAsync, audio send/receive loop, dispose) in ContactCenter-API/Services/VoiceLiveService.cs
+- [X] T011 [US1] Register VoiceLiveService in DI container in ContactCenter-API/Program.cs
+- [X] T012 [US1] Update acsMediaStreamingHandler to dispatch to VoiceLiveService or AzureOpenAIService based on VoiceApiMode in ContactCenter-API/Models/acsMediaStreamingHandler.cs
+- [X] T013 [US1] Update CallService to freeze VoiceApiMode/VoiceLiveModel at call start (FR-014) and pass to media streaming handler in ContactCenter-API/Services/CallService.cs
+- [X] T014 [US1] Implement reconnection logic in VoiceLiveService with exponential backoff (1s, 2s, 4s — max 3 attempts) in ContactCenter-API/Services/VoiceLiveService.cs
+- [X] T015 [US1] Emit Reconnecting and ReconnectFailed SignalR events via TranscriptHub during VoiceLive reconnection in ContactCenter-API/Services/VoiceLiveService.cs
+- [X] T016 [US1] Add VoiceLive engine and voice logging per call (FR-015) in ContactCenter-API/Services/CallService.cs
+- [X] T017 [P] [US1] Enable VoiceLive radio button, implement Not Configured vs enabled badge logic, and add AI Model dropdown (FR-001, FR-013, FR-021) in ContactCenter-APP/Pages/Index.cshtml
+- [X] T018 [US1] Update site.js to handle VoiceLive mode selection, model dropdown population/save/load, and toggle mode-specific UI sections in ContactCenter-APP/wwwroot/js/site.js
+- [X] T019 [US1] Update site.js to display reconnection status indicator ("Reconnecting… attempt N/3") and enable operator abort during reconnect (FR-019, FR-020) in ContactCenter-APP/wwwroot/js/site.js
 
 **Details**:
 
@@ -105,10 +105,10 @@
 
 ### Implementation for User Story 2
 
-- [ ] T020 [US2] Update site.js voice dropdown to dynamically swap between OpenAI voices and Dragon HD voices based on selected voice API mode in ContactCenter-APP/wwwroot/js/site.js
-- [ ] T021 [US2] Implement locale grouping in voice dropdown using optgroup elements for Dragon HD voices (FR-023) in ContactCenter-APP/wwwroot/js/site.js
-- [ ] T022 [US2] Wire selectedVoiceLiveVoice to VoiceLiveService session creation (pass voice name to ConfigureSessionAsync options) in ContactCenter-API/Services/VoiceLiveService.cs
-- [ ] T023 [US2] Implement voice fallback in SettingsService — default to first available Dragon HD voice when saved voice is unavailable in ContactCenter-API/Services/SettingsService.cs
+- [X] T020 [US2] Update site.js voice dropdown to dynamically swap between OpenAI voices and Dragon HD voices based on selected voice API mode in ContactCenter-APP/wwwroot/js/site.js
+- [X] T021 [US2] Implement locale grouping in voice dropdown using optgroup elements for Dragon HD voices (FR-023) in ContactCenter-APP/wwwroot/js/site.js
+- [X] T022 [US2] Wire selectedVoiceLiveVoice to VoiceLiveService session creation (pass voice name to ConfigureSessionAsync options) in ContactCenter-API/Services/VoiceLiveService.cs
+- [X] T023 [US2] Implement voice fallback in SettingsService — default to first available Dragon HD voice when saved voice is unavailable in ContactCenter-API/Services/SettingsService.cs
 
 **Details**:
 
@@ -131,13 +131,13 @@
 
 ### Implementation for User Story 3
 
-- [ ] T024 [US3] Implement built-in VoiceLive transcript event handling (user speech + AI speech events) in ContactCenter-API/Services/VoiceLiveService.cs
-- [ ] T025 [US3] Forward VoiceLive transcript events to SignalR TranscriptHub using existing transcript entry format in ContactCenter-API/Services/VoiceLiveService.cs
+- [X] T024 [US3] Implement built-in VoiceLive transcript event handling (user speech + AI speech events) in ContactCenter-API/Services/VoiceLiveService.cs
+- [X] T025 [US3] Forward VoiceLive transcript events to SignalR TranscriptHub using existing transcript entry format in ContactCenter-API/Services/VoiceLiveService.cs
 - [ ] T025a [US3] Install Microsoft.CognitiveServices.Speech NuGet package in ContactCenter-API/ContactCenter-API.csproj (required only if SeparateSTT is implemented)
 - [ ] T026 [US3] Implement SeparateSTT pipeline using Azure Speech SDK SpeechRecognizer running alongside VoiceLive audio stream in ContactCenter-API/Services/VoiceLiveService.cs
-- [ ] T027 [P] [US3] Add Transcription Source dropdown (visible only when VoiceLive is selected, options: Built-in / Separate STT) in ContactCenter-APP/Pages/Index.cshtml
-- [ ] T028 [US3] Update site.js for transcription mode toggle visibility, save/load of transcriptionMode setting in ContactCenter-APP/wwwroot/js/site.js
-- [ ] T029 [US3] Verify post-call analysis pipeline (sentiment, emotion, summary) receives VoiceLive transcripts correctly in ContactCenter-API/Services/CallService.cs
+- [X] T027 [P] [US3] Add Transcription Source dropdown (visible only when VoiceLive is selected, options: Built-in / Separate STT) in ContactCenter-APP/Pages/Index.cshtml
+- [X] T028 [US3] Update site.js for transcription mode toggle visibility, save/load of transcriptionMode setting in ContactCenter-APP/wwwroot/js/site.js
+- [X] T029 [US3] Verify post-call analysis pipeline (sentiment, emotion, summary) receives VoiceLive transcripts correctly in ContactCenter-API/Services/CallService.cs
 
 **Details**:
 
@@ -162,9 +162,9 @@
 
 ### Implementation for User Story 4
 
-- [ ] T030 [US4] Update health check endpoint to include VoiceLive configuration status (configured flag + masked endpoint) in ContactCenter-API/Program.cs
-- [ ] T031 [US4] Implement clear error handling when operator initiates VoiceLive call without configuration in ContactCenter-API/Services/CallService.cs
-- [ ] T032 [US4] Add VoiceLive configuration validation on startup with warning log when endpoint is missing in ContactCenter-API/Program.cs
+- [X] T030 [US4] Update health check endpoint to include VoiceLive configuration status (configured flag + masked endpoint) in ContactCenter-API/Program.cs
+- [X] T031 [US4] Implement clear error handling when operator initiates VoiceLive call without configuration in ContactCenter-API/Services/CallService.cs
+- [X] T032 [US4] Add VoiceLive configuration validation on startup with warning log when endpoint is missing in ContactCenter-API/Program.cs
 
 **Details**:
 
@@ -180,12 +180,12 @@
 
 **Purpose**: Tests, cleanup, and validation across all user stories
 
-- [ ] T033 [P] Create VoiceLiveVoiceValidationTests (voice catalog completeness, locale grouping, ValidNames consistency) in CallCenterPOC-API.Tests/Unit/VoiceLiveVoiceValidationTests.cs
-- [ ] T034 [P] Create SettingsValidationTests (TranscriptionMode, VoiceLiveModel, SelectedVoiceLiveVoice validation and defaults) in CallCenterPOC-API.Tests/Unit/SettingsValidationTests.cs
-- [ ] T035 [P] Update SettingsControllerContractTests for new VoiceLive fields in GET/PUT responses in CallCenterPOC-API.Tests/Contract/SettingsControllerContractTests.cs
-- [ ] T036 [P] Update HealthCheckContractTests for VoiceLive configuration status in response in CallCenterPOC-API.Tests/Contract/HealthCheckContractTests.cs
-- [ ] T037 Code cleanup, error handling review, and edge case hardening across all modified files
-- [ ] T038 Run quickstart.md validation steps (NuGet installed, config present, RBAC documented, health check works) and verify SC-001 (settings mode switch round-trip < 5 seconds)
+- [X] T033 [P] Create VoiceLiveVoiceValidationTests (voice catalog completeness, locale grouping, ValidNames consistency) in CallCenterPOC-API.Tests/Unit/VoiceLiveVoiceValidationTests.cs
+- [X] T034 [P] Create SettingsValidationTests (TranscriptionMode, VoiceLiveModel, SelectedVoiceLiveVoice validation and defaults) in CallCenterPOC-API.Tests/Unit/SettingsValidationTests.cs
+- [X] T035 [P] Update SettingsControllerContractTests for new VoiceLive fields in GET/PUT responses in CallCenterPOC-API.Tests/Contract/SettingsControllerContractTests.cs
+- [X] T036 [P] Update HealthCheckContractTests for VoiceLive configuration status in response in CallCenterPOC-API.Tests/Contract/HealthCheckContractTests.cs
+- [X] T037 Code cleanup, error handling review, and edge case hardening across all modified files
+- [X] T038 Run quickstart.md validation steps (NuGet installed, config present, RBAC documented, health check works) and verify SC-001 (settings mode switch round-trip < 5 seconds)
 
 ---
 

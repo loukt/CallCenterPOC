@@ -184,5 +184,103 @@ namespace CallCenterPOC_API.Tests.Contract
             using var doc = JsonDocument.Parse(json);
             Assert.Equal("alloy", doc.RootElement.GetProperty("selectedVoice").GetString());
         }
+
+        [Fact]
+        public async Task GetSettings_ShouldIncludeVoiceLiveConfigured()
+        {
+            var response = await _client.GetAsync("/api/Settings");
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            Assert.True(doc.RootElement.TryGetProperty("voiceLiveConfigured", out var vlConfigured),
+                "Should have 'voiceLiveConfigured'");
+            Assert.False(vlConfigured.GetBoolean(), "Without config, should be false");
+        }
+
+        [Fact]
+        public async Task GetSettings_ShouldIncludeAvailableVoiceLiveVoices()
+        {
+            var response = await _client.GetAsync("/api/Settings");
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            Assert.True(doc.RootElement.TryGetProperty("availableVoiceLiveVoices", out var voices),
+                "Should have 'availableVoiceLiveVoices'");
+            Assert.Equal(JsonValueKind.Array, voices.ValueKind);
+            Assert.True(voices.GetArrayLength() >= 22, "Should have at least 22 Dragon HD voices");
+        }
+
+        [Fact]
+        public async Task GetSettings_ShouldIncludeAvailableVoiceLiveModels()
+        {
+            var response = await _client.GetAsync("/api/Settings");
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            Assert.True(doc.RootElement.TryGetProperty("availableVoiceLiveModels", out var models),
+                "Should have 'availableVoiceLiveModels'");
+            Assert.Equal(JsonValueKind.Array, models.ValueKind);
+            Assert.True(models.GetArrayLength() >= 3, "Should have at least 3 VoiceLive models");
+        }
+
+        [Fact]
+        public async Task GetSettings_ShouldIncludeVoiceLiveModelField()
+        {
+            var response = await _client.GetAsync("/api/Settings");
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            Assert.True(doc.RootElement.TryGetProperty("voiceLiveModel", out var model),
+                "Should have 'voiceLiveModel'");
+            Assert.Equal("gpt-4o", model.GetString());
+        }
+
+        [Fact]
+        public async Task PutSettings_VoiceLiveMode_WithValidModel_ShouldPersist()
+        {
+            var content = new StringContent(
+                JsonSerializer.Serialize(new
+                {
+                    maxCallTimeMinutes = 2.0,
+                    voiceApiMode = "VoiceLive",
+                    voiceLiveModel = "gpt-4.1",
+                    selectedVoiceLiveVoice = "en-US-Ava:DragonHDLatestNeural"
+                }),
+                System.Text.Encoding.UTF8);
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+
+            var response = await _client.PutAsync("/api/Settings", content);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            Assert.Equal("VoiceLive", doc.RootElement.GetProperty("voiceApiMode").GetString());
+            Assert.Equal("gpt-4.1", doc.RootElement.GetProperty("voiceLiveModel").GetString());
+        }
+
+        [Fact]
+        public async Task PutSettings_VoiceLiveMode_InvalidModel_DefaultsToGpt4o()
+        {
+            var content = new StringContent(
+                JsonSerializer.Serialize(new
+                {
+                    maxCallTimeMinutes = 2.0,
+                    voiceApiMode = "VoiceLive",
+                    voiceLiveModel = "invalid-model"
+                }),
+                System.Text.Encoding.UTF8);
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+
+            var response = await _client.PutAsync("/api/Settings", content);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            Assert.Equal("gpt-4o", doc.RootElement.GetProperty("voiceLiveModel").GetString());
+        }
     }
 }

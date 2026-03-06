@@ -41,6 +41,7 @@ namespace CallCenterPOC_API.Tests.Unit
                 hubContextMock.Object,
                 campaignService,
                 callHistoryService,
+                new ContactCenterPOC.Models.VoiceLiveConfig(),
                 sentimentService: null);
 
             for (int i = 0; i < prePopulateCount; i++)

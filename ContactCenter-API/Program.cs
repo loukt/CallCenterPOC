@@ -1,9 +1,15 @@
 using Azure.Identity;
 using Azure.Storage.Blobs;
 using ContactCenterPOC.Hubs;
+using ContactCenterPOC.Models;
 using ContactCenterPOC.Services;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Bind VoiceLive configuration
+builder.Services.Configure<VoiceLiveConfig>(builder.Configuration.GetSection("VoiceLive"));
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<VoiceLiveConfig>>().Value);
 
 // Add services to the container.
 builder.Services.AddSingleton<CallService>();
@@ -135,6 +141,17 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// T032: Startup validation — warn if VoiceLive not configured
+var vlStartupConfig = app.Services.GetRequiredService<VoiceLiveConfig>();
+if (!vlStartupConfig.IsConfigured)
+{
+    app.Logger.LogInformation("VoiceLive endpoint not configured — VoiceLive mode will be unavailable.");
+}
+else
+{
+    app.Logger.LogInformation("VoiceLive configured with endpoint: {Endpoint}", vlStartupConfig.EndpointUri);
+}
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -156,7 +173,25 @@ app.MapControllers();
 app.MapHub<TranscriptHub>("/transcriptHub");
 
 // Health check endpoint for load balancer probes and monitoring
-app.MapGet("/healthz", () => Results.Ok(new { status = "healthy", timestamp = DateTimeOffset.UtcNow }));
+app.MapGet("/healthz", (VoiceLiveConfig vlConfig) =>
+{
+    var maskedEndpoint = "";
+    if (!string.IsNullOrEmpty(vlConfig.EndpointUri) && Uri.TryCreate(vlConfig.EndpointUri, UriKind.Absolute, out var uri))
+    {
+        var hostParts = uri.Host.Split('.');
+        maskedEndpoint = hostParts.Length > 0 ? uri.Host.Replace(hostParts[0], "*") : uri.Host;
+    }
+    return Results.Ok(new
+    {
+        status = "healthy",
+        timestamp = DateTimeOffset.UtcNow,
+        voiceLive = new
+        {
+            configured = vlConfig.IsConfigured,
+            endpoint = maskedEndpoint
+        }
+    });
+});
 
 app.Run();
 

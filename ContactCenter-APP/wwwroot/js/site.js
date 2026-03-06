@@ -845,7 +845,7 @@
         if (!c) return;
 
         var statusStr = typeof status === "number"
-            ? ["Initiating", "Ringing", "Connected", "Disconnected", "Failed"][status]
+            ? ["Initiating", "Ringing", "Connected", "Disconnected", "Failed", "Reconnecting"][status]
             : status;
 
         c.status = statusStr;
@@ -864,6 +864,19 @@
 
             // Track successful connection
             kpiState.successfulCalls++;
+
+            // Clear reconnection banner on successful connect
+            removeReconnectBanner(callConnectionId);
+        }
+
+        // Handle VoiceLive reconnection status
+        if (statusStr === "Reconnecting") {
+            showReconnectBanner(callConnectionId, status);
+        } else if (statusStr === "ReconnectFailed") {
+            showReconnectBanner(callConnectionId, status);
+        } else {
+            removeReconnectBanner(callConnectionId);
+        }
         }
 
         // Stop timer on Disconnected or Failed
@@ -910,8 +923,47 @@
             case "Connected": badge.classList.add("bg-success"); break;
             case "Disconnected": badge.classList.add("bg-danger"); break;
             case "Failed": badge.classList.add("bg-danger"); break;
+            case "Reconnecting": badge.classList.add("bg-warning", "text-dark"); break;
+            case "ReconnectFailed": badge.classList.add("bg-danger"); break;
             default: badge.classList.add("bg-secondary");
         }
+    }
+
+    // ─── Reconnection Banner ─────────────────────────────────
+    function showReconnectBanner(callConnectionId, status) {
+        if (callConnectionId !== activeTabId) return;
+        var container = document.getElementById("activeCallArea");
+        if (!container) return;
+
+        var existing = document.getElementById("reconnectBanner");
+        if (!existing) {
+            existing = document.createElement("div");
+            existing.id = "reconnectBanner";
+            existing.className = "reconnect-banner";
+            // Insert after call status bar
+            var statusBar = document.getElementById("callStatusBar");
+            if (statusBar && statusBar.nextSibling) {
+                container.insertBefore(existing, statusBar.nextSibling);
+            } else {
+                container.appendChild(existing);
+            }
+        }
+
+        if (typeof status === "string" && status.startsWith("Reconnecting")) {
+            // Extract attempt info from message if available (e.g., "Reconnecting… attempt 2/3")
+            existing.className = "reconnect-banner";
+            existing.innerHTML = '<span>⟳</span><span>Reconnecting to VoiceLive…</span><span style="margin-left:auto;font-size:0.75rem;opacity:0.7">Hang up to abort</span>';
+        } else if (status === "ReconnectFailed") {
+            existing.className = "reconnect-banner failed";
+            existing.innerHTML = '<span>✕</span><span>All reconnection attempts failed. Call ended.</span>';
+            setTimeout(function () { removeReconnectBanner(callConnectionId); }, 8000);
+        }
+    }
+
+    function removeReconnectBanner(callConnectionId) {
+        if (callConnectionId !== activeTabId) return;
+        var banner = document.getElementById("reconnectBanner");
+        if (banner) banner.remove();
     }
 
     // ─── Call Controls ───────────────────────────────────────
@@ -1822,30 +1874,156 @@
                 var maxCallInput = document.getElementById("settingsMaxCallTime");
                 if (maxCallInput) maxCallInput.value = settings.maxCallTimeMinutes || 2;
 
+                // Voice API mode radio
                 var radios = document.querySelectorAll('input[name="voiceApiMode"]');
                 radios.forEach(function (r) {
                     r.checked = (r.value === settings.voiceApiMode);
                 });
 
+                // VoiceLive configuration status
+                var vlOption = document.getElementById("voiceLiveOption");
+                var vlRadio = document.querySelector('input[name="voiceApiMode"][value="VoiceLive"]');
+                var notConfiguredBadge = document.getElementById("voiceLiveNotConfiguredBadge");
+                if (settings.voiceLiveConfigured === false) {
+                    if (vlRadio) vlRadio.disabled = true;
+                    if (vlOption) vlOption.classList.add("disabled-option");
+                    if (notConfiguredBadge) notConfiguredBadge.classList.remove("d-none");
+                } else {
+                    if (vlRadio) vlRadio.disabled = false;
+                    if (vlOption) vlOption.classList.remove("disabled-option");
+                    if (notConfiguredBadge) notConfiguredBadge.classList.add("d-none");
+                }
+
+                // OpenAI voice dropdown
                 var voiceSelect = document.getElementById("settingsVoice");
                 if (voiceSelect && settings.selectedVoice) {
                     voiceSelect.value = settings.selectedVoice;
                 }
+
+                // VoiceLive model dropdown
+                var modelSelect = document.getElementById("settingsVoiceLiveModel");
+                if (modelSelect && settings.availableVoiceLiveModels) {
+                    modelSelect.innerHTML = "";
+                    settings.availableVoiceLiveModels.forEach(function (m) {
+                        var opt = document.createElement("option");
+                        opt.value = m;
+                        opt.textContent = m;
+                        modelSelect.appendChild(opt);
+                    });
+                    if (settings.voiceLiveModel) {
+                        modelSelect.value = settings.voiceLiveModel;
+                    }
+                }
+
+                // Cache available voices for mode switching
+                window._vlAvailableVoices = settings.availableVoiceLiveVoices || [];
+                window._vlSettings = settings;
+
+                // Transcription source
+                var transcriptionSelect = document.getElementById("transcriptionSource");
+                if (transcriptionSelect && settings.transcriptionMode) {
+                    transcriptionSelect.value = settings.transcriptionMode;
+                }
+
+                // Toggle VoiceLive-specific sections
+                updateVoiceLiveSections(settings.voiceApiMode);
             })
             .catch(function (err) {
                 console.error("Failed to load settings:", err);
             });
     }
 
+    function updateVoiceLiveSections(mode) {
+        var modelGroup = document.getElementById("voiceLiveModelGroup");
+        var transcriptionGroup = document.getElementById("transcriptionSourceGroup");
+        var voiceSelect = document.getElementById("settingsVoice");
+        var voiceGroup = voiceSelect ? voiceSelect.closest(".settings-group") : null;
+
+        if (mode === "VoiceLive") {
+            // Show VoiceLive model dropdown
+            if (modelGroup) modelGroup.classList.remove("d-none");
+            // Show transcription source
+            if (transcriptionGroup) transcriptionGroup.classList.remove("d-none");
+
+            // Swap voice dropdown to Dragon HD voices
+            if (voiceSelect && window._vlAvailableVoices && window._vlAvailableVoices.length > 0) {
+                voiceSelect.innerHTML = "";
+                // Group by locale
+                var grouped = {};
+                window._vlAvailableVoices.forEach(function (v) {
+                    var locale = v.locale || "Unknown";
+                    if (!grouped[locale]) grouped[locale] = [];
+                    grouped[locale].push(v);
+                });
+                // Sort locales, en-US first
+                var locales = Object.keys(grouped).sort(function (a, b) {
+                    if (a.startsWith("en-US")) return -1;
+                    if (b.startsWith("en-US")) return 1;
+                    return a.localeCompare(b);
+                });
+                locales.forEach(function (locale) {
+                    var optgroup = document.createElement("optgroup");
+                    optgroup.label = locale;
+                    grouped[locale].sort(function (a, b) {
+                        return (a.displayName || "").localeCompare(b.displayName || "");
+                    }).forEach(function (v) {
+                        var opt = document.createElement("option");
+                        opt.value = v.fullName;
+                        opt.textContent = v.displayName + " (" + locale + ")";
+                        optgroup.appendChild(opt);
+                    });
+                    voiceSelect.appendChild(optgroup);
+                });
+                // Set selected
+                if (window._vlSettings && window._vlSettings.selectedVoiceLiveVoice) {
+                    voiceSelect.value = window._vlSettings.selectedVoiceLiveVoice;
+                }
+            }
+        } else {
+            // Hide VoiceLive model dropdown
+            if (modelGroup) modelGroup.classList.add("d-none");
+            // Hide transcription source
+            if (transcriptionGroup) transcriptionGroup.classList.add("d-none");
+
+            // Restore OpenAI voices
+            if (voiceSelect) {
+                voiceSelect.innerHTML = "";
+                var openAIVoices = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"];
+                openAIVoices.forEach(function (v) {
+                    var opt = document.createElement("option");
+                    opt.value = v;
+                    opt.textContent = v.charAt(0).toUpperCase() + v.slice(1);
+                    voiceSelect.appendChild(opt);
+                });
+                if (window._vlSettings && window._vlSettings.selectedVoice) {
+                    voiceSelect.value = window._vlSettings.selectedVoice;
+                }
+            }
+        }
+    }
+
+    // Radio change handler for voice API mode
+    document.addEventListener("change", function (e) {
+        if (e.target && e.target.name === "voiceApiMode") {
+            updateVoiceLiveSections(e.target.value);
+        }
+    });
+
     window.saveSettings = function () {
         var maxCallInput = document.getElementById("settingsMaxCallTime");
         var voiceRadio = document.querySelector('input[name="voiceApiMode"]:checked');
         var voiceSelect = document.getElementById("settingsVoice");
+        var modelSelect = document.getElementById("settingsVoiceLiveModel");
+        var transcriptionSelect = document.getElementById("transcriptionSource");
+        var mode = voiceRadio ? voiceRadio.value : "ChatGPT";
 
         var payload = {
             maxCallTimeMinutes: parseFloat(maxCallInput.value) || 2,
-            voiceApiMode: voiceRadio ? voiceRadio.value : "ChatGPT",
-            selectedVoice: voiceSelect ? voiceSelect.value : "alloy"
+            voiceApiMode: mode,
+            selectedVoice: mode === "ChatGPT" ? (voiceSelect ? voiceSelect.value : "alloy") : undefined,
+            voiceLiveModel: mode === "VoiceLive" ? (modelSelect ? modelSelect.value : "gpt-4o") : undefined,
+            selectedVoiceLiveVoice: mode === "VoiceLive" ? (voiceSelect ? voiceSelect.value : undefined) : undefined,
+            transcriptionMode: mode === "VoiceLive" ? (transcriptionSelect ? transcriptionSelect.value : "BuiltIn") : undefined
         };
 
         var saveBtn = document.getElementById("saveSettingsBtn");

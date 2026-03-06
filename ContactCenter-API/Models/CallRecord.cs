@@ -22,6 +22,11 @@ namespace ContactCenterPOC.Models
         public List<TranscriptEntry> TranscriptEntries { get; set; } = new();
         public DateTimeOffset StartedAt { get; set; }
         public DateTimeOffset EndedAt { get; set; }
+
+        // VoiceLive-specific fields for call history
+        public string VoiceApiMode { get; set; } = "ChatGPT";
+        public string? VoiceLiveModel { get; set; }
+        public string? VoiceLiveVoice { get; set; }
     }
 
     public class SentimentBreakdown
