@@ -34,6 +34,7 @@
   --radius-lg: 12px;
   --transition: 200ms ease;
   --header-height: 56px;
+  --surface-card: #1e293b;
   --font-stack: 'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
@@ -1456,7 +1457,7 @@ html, body {
 .settings-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.55);
+  background: rgba(0,0,0,0.75);
   z-index: 9999;
   display: flex;
   align-items: flex-start;

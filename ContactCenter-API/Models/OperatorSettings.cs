@@ -18,7 +18,7 @@ namespace ContactCenterPOC.Models
 
         public static readonly HashSet<string> ValidVoiceLiveModels = new(StringComparer.OrdinalIgnoreCase)
         {
-            "gpt-realtime", "gpt-4o", "gpt-4.1", "gpt-5", "phi-4-mini"
+            "gpt-4o", "gpt-4.1", "gpt-5"
         };
 
         public static readonly HashSet<string> ValidTranscriptionModes = new(StringComparer.OrdinalIgnoreCase)

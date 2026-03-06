@@ -36,9 +36,9 @@ namespace CallCenterPOC_API.Tests.Unit
         public void ValidVoiceLiveModels_ShouldContainExpectedModels()
         {
             Assert.Contains("gpt-4o", OperatorSettings.ValidVoiceLiveModels);
-            Assert.Contains("gpt-realtime", OperatorSettings.ValidVoiceLiveModels);
-            Assert.True(OperatorSettings.ValidVoiceLiveModels.Count >= 3,
-                "Should have at least 3 valid VoiceLive models");
+            Assert.Contains("gpt-4.1", OperatorSettings.ValidVoiceLiveModels);
+            Assert.Contains("gpt-5", OperatorSettings.ValidVoiceLiveModels);
+            Assert.Equal(3, OperatorSettings.ValidVoiceLiveModels.Count);
         }
 
         [Fact]

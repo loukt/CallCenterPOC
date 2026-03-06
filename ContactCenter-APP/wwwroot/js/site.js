@@ -709,13 +709,19 @@
             c.sentimentData.push(0);
         }
 
-        // Push emotion data per speaker
+        // Push emotion data to BOTH arrays on every entry (aligned with sentiment timeline)
         var emotionVal = entryData.emotion ? emotionToNumber(entryData.emotion.label) : 0;
         var isOperator = (entryData.speaker === 0 || entryData.speaker === "AI");
         if (isOperator) {
             c.operatorEmotionData.push(emotionVal);
+            // Carry forward last customer value so timelines stay aligned
+            var lastCust = c.customerEmotionData.length > 0 ? c.customerEmotionData[c.customerEmotionData.length - 1] : 0;
+            c.customerEmotionData.push(lastCust);
         } else {
             c.customerEmotionData.push(emotionVal);
+            // Carry forward last operator value so timelines stay aligned
+            var lastOp = c.operatorEmotionData.length > 0 ? c.operatorEmotionData[c.operatorEmotionData.length - 1] : 0;
+            c.operatorEmotionData.push(lastOp);
         }
 
         // Mic activity pulse
@@ -810,24 +816,11 @@
                 var emotionVal = emotionToNumber(emotion.label);
                 var isOperator = (c.transcriptEntries[i].speaker === 0 || c.transcriptEntries[i].speaker === "AI");
 
-                // Update the corresponding emotion data array
-                if (isOperator) {
-                    // Find the index of this entry among operator entries
-                    var opIdx = 0;
-                    for (var k = 0; k < i; k++) {
-                        if (c.transcriptEntries[k].speaker === 0 || c.transcriptEntries[k].speaker === "AI") opIdx++;
-                    }
-                    if (opIdx < c.operatorEmotionData.length) {
-                        c.operatorEmotionData[opIdx] = emotionVal;
-                    }
-                } else {
-                    var custIdx = 0;
-                    for (var k2 = 0; k2 < i; k2++) {
-                        if (c.transcriptEntries[k2].speaker !== 0 && c.transcriptEntries[k2].speaker !== "AI") custIdx++;
-                    }
-                    if (custIdx < c.customerEmotionData.length) {
-                        c.customerEmotionData[custIdx] = emotionVal;
-                    }
+                // Update emotion data — arrays are 1:1 with transcript entries
+                if (i < c.operatorEmotionData.length && isOperator) {
+                    c.operatorEmotionData[i] = emotionVal;
+                } else if (i < c.customerEmotionData.length && !isOperator) {
+                    c.customerEmotionData[i] = emotionVal;
                 }
                 break;
             }
