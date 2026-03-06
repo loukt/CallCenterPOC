@@ -1,0 +1,38 @@
+openapi: 3.0.3
+info:
+  title: ContactCenter Health API — VoiceLive Extension
+  version: 2.0.0
+  description: |
+    Health check contract changes for the 002-voicelive-integration feature.
+    Extends the existing /healthz endpoint with VoiceLive configuration status.
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      summary: Application health check with VoiceLive status
+      responses:
+        '200':
+          description: Healthy — includes VoiceLive configuration status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [Healthy]
+        voiceLive:
+          type: object
+          properties:
+            configured:
+              type: boolean
+              description: Whether VoiceLive endpoint URI is set
+            endpoint:
+              type: string
+              description: VoiceLive endpoint (masked for security, e.g., "*.services.ai.azure.com")

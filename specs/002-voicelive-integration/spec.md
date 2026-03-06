@@ -77,12 +77,18 @@ As a system administrator, I want to configure the VoiceLive resource endpoint a
 ### Edge Cases
 
 - What happens when VoiceLive is selected but the Azure resource is in a region that doesn't support Dragon HD voices? The system should fall back to a supported voice and log a warning.
-- How does the system handle VoiceLive WebSocket disconnections mid-call? The system should attempt reconnection or gracefully end the call with an error notification.
+- How does the system handle VoiceLive WebSocket disconnections mid-call? The system attempts up to 3 automatic reconnects with exponential backoff. During reconnection, a clear status indicator (e.g., "Reconnecting… attempt 2/3") is shown to the operator with an option to manually end the call. If all 3 attempts fail, the call is gracefully ended with an error notification.
 - What happens when the operator switches voice API mode while a call is in progress? The change should only take effect for subsequent calls, not the active one.
 - What happens if the VoiceLive session exceeds the configured max call time? The same auto-hang-up logic should apply.
 - How does the system handle VoiceLive rate limits or quota exhaustion? The system should surface a clear error to the operator.
 
 ## Requirements *(mandatory)*
+
+### Out of Scope
+
+- **Custom voices and custom avatars**: VoiceLive supports custom voice creation, but this is excluded from the initial integration.
+- **Inbound call support**: This feature covers outbound calls only; VoiceLive for inbound call handling is a separate feature.
+- **VoiceLive-specific billing/usage tracking**: Per-call cost tracking or usage dashboards for VoiceLive are not included.
 
 ### Functional Requirements
 
@@ -93,20 +99,30 @@ As a system administrator, I want to configure the VoiceLive resource endpoint a
 - **FR-005**: The system MUST support at minimum the following en-US Dragon HD voices: Ava, Andrew, Adam, Brian, Davis, Emma, Jenny, Nova, Aria, Alloy, Phoebe.
 - **FR-006**: The selected VoiceLive voice MUST be persisted via the existing `PUT /api/Settings` endpoint and applied when creating new VoiceLive sessions.
 - **FR-007**: The system MUST use the same system prompt (campaign prompt or default) for VoiceLive sessions as for ChatGPT Realtime sessions.
-- **FR-008**: Real-time transcription MUST continue to work with VoiceLive calls, producing transcript entries that appear in the live transcript panel.
-- **FR-009**: Post-call analysis (sentiment, emotion, call summary) MUST function identically for VoiceLive calls as for ChatGPT Realtime calls.
+- **FR-008**: Real-time transcription MUST continue to work with VoiceLive calls, producing transcript entries that appear in the live transcript panel. The operator MUST be able to choose the transcription source via a setting: either (a) VoiceLive's built-in transcript events from the WebSocket session, or (b) a separate Azure Speech STT pipeline running alongside VoiceLive.
+- **FR-009**: Post-call analysis (sentiment, emotion, call summary) MUST function identically for VoiceLive calls as for ChatGPT Realtime calls, regardless of the selected transcription source.
+- **FR-016**: The settings overlay MUST include a "Transcription Source" dropdown (visible only when VoiceLive is selected) with options: "Built-in (VoiceLive)" and "Separate STT Pipeline". The default MUST be "Built-in (VoiceLive)".
+- **FR-017**: When "Separate STT Pipeline" is selected, the system MUST use Azure Speech SDK speech-to-text on the call audio independently of VoiceLive, producing transcript entries in the same format as the built-in option.
 - **FR-010**: The system MUST support authentication to the VoiceLive service via Managed Identity (DefaultAzureCredential) and optionally via API key.
 - **FR-011**: The application configuration MUST include a new section for VoiceLive settings (endpoint URI and optional deployment/model name).
 - **FR-012**: The health check endpoint MUST indicate VoiceLive configuration status (configured or not configured) without blocking the overall health check.
 - **FR-013**: When VoiceLive is not configured, the "Voice Live" radio button MUST remain disabled with a "Not Configured" badge instead of "Coming Soon".
 - **FR-014**: The voice API mode switch MUST only affect new calls. Calls already in progress MUST continue using the engine they started with.
 - **FR-015**: The system MUST log which voice API engine is used for each call, including the specific voice selected.
+- **FR-018**: When the VoiceLive WebSocket disconnects mid-call, the system MUST attempt up to 3 automatic reconnections with exponential backoff (e.g., 1s, 2s, 4s delays). If all 3 attempts fail, the system MUST gracefully end the call and notify the operator with an error message.
+- **FR-019**: During VoiceLive reconnection attempts, the UI MUST display a clear call status indicator (e.g., "Reconnecting… attempt 2/3") so the operator knows the current state of the call.
+- **FR-020**: During VoiceLive reconnection attempts, the operator MUST have the ability to manually end the call at any time via the existing hang-up control, without waiting for reconnection to complete or fail.
+- **FR-021**: When "Voice Live" is selected, the settings overlay MUST display an "AI Model" dropdown listing the available VoiceLive-supported models (e.g., GPT-5, GPT-4.1, GPT-4o, Phi-4). The selected model MUST be persisted via the existing `PUT /api/Settings` endpoint.
+- **FR-022**: The selected VoiceLive model MUST be applied when creating new VoiceLive sessions. The default model MUST be GPT-4o if no selection has been made.
+- **FR-023**: The system MUST support multi-locale Dragon HD voices (not limited to en-US). The voice dropdown MUST display voices grouped or filterable by locale when VoiceLive is selected.
 
 ### Key Entities
 
 - **VoiceLiveSession**: Represents an active WebSocket connection to the Azure AI VoiceLive service. Analogous to the current OpenAI Realtime conversation session. Configured with a Dragon HD voice, model, system prompt, and turn detection settings.
 - **VoiceLiveVoice**: Represents a Dragon HD voice identified by its full Azure Speech voice name (e.g., `en-US-Ava:DragonHDLatestNeural`). Has a display-friendly name (e.g., "Ava") and gender metadata.
 - **VoiceApiMode**: Setting with values `ChatGPT` and `VoiceLive` that determines which voice engine is used for outbound calls. Already exists in `OperatorSettings`.
+- **TranscriptionMode**: Setting with values `BuiltIn` and `SeparateSTT` that determines how transcription is produced during VoiceLive calls. `BuiltIn` uses VoiceLive's native transcript events; `SeparateSTT` uses an independent Azure Speech STT pipeline. Only applicable when VoiceApiMode is `VoiceLive`.
+- **VoiceLiveModel**: Setting that specifies which LLM model to use for VoiceLive sessions (e.g., `gpt-4o`, `gpt-4.1`, `gpt-5`, `phi-4`). Operator-selectable in the settings overlay when VoiceLive is active. Defaults to `gpt-4o`.
 
 ## Success Criteria *(mandatory)*
 
@@ -115,24 +131,35 @@ As a system administrator, I want to configure the VoiceLive resource endpoint a
 - **SC-001**: Operators can switch between ChatGPT Realtime and VoiceLive in under 5 seconds via the settings overlay.
 - **SC-002**: A VoiceLive call completes successfully end-to-end (dial, AI conversation, hang up) with the same reliability as a ChatGPT Realtime call.
 - **SC-003**: All 11 Dragon HD en-US voices are selectable from the settings dropdown when VoiceLive is active.
-- **SC-004**: Transcript, sentiment, emotion, and call summary are generated for VoiceLive calls with the same quality as ChatGPT Realtime calls.
+- **SC-004**: Transcript, sentiment, emotion, and call summary are generated for VoiceLive calls with the same quality as ChatGPT Realtime calls, using either the built-in or separate STT transcription source as configured by the operator.
 - **SC-005**: Switching voice API mode does not interrupt any call currently in progress.
 - **SC-006**: The system gracefully handles VoiceLive configuration absence — operators see "Not Configured" and cannot initiate calls with an unconfigured engine.
 - **SC-007**: VoiceLive calls use server-side echo cancellation and semantic VAD, resulting in fewer audio artifacts compared to ChatGPT Realtime calls during phone conversations.
+- **SC-008**: Operators can select an AI model from the VoiceLive model dropdown and the selected model is used for new calls.
 
 ## Assumptions
 
-- The Azure AI VoiceLive service (`Azure.AI.VoiceLive` NuGet 1.0.0 GA / 1.1.0-beta.3) is available in the deployment region (Southeast Asia).
+- The Azure AI VoiceLive service (`Azure.AI.VoiceLive` NuGet 1.0.0 GA) is available in the deployment region (Southeast Asia). The implementation targets GA 1.0.0 for production stability; beta 1.1.0-beta.3 features should be evaluated for future upgrade (see Dependencies).
 - VoiceLive uses a WebSocket event protocol compatible with the Azure OpenAI Realtime event format, making the bridging architecture similar to the existing media streaming handler pattern.
 - Dragon HD voices follow the naming convention `{locale}-{Name}:DragonHDLatestNeural` (e.g., `en-US-Ava:DragonHDLatestNeural`).
 - Authentication uses `DefaultAzureCredential` (same as the existing OpenAI integration), requiring the app's Managed Identity to have the appropriate role on the Speech/Foundry resource.
 - The existing ACS Call Automation audio streaming (PCM 16-bit, 16kHz) is compatible with VoiceLive's audio input requirements.
 - No additional Azure resource provisioning is required beyond creating a Microsoft Foundry or Azure Speech resource and assigning permissions.
-- The en-US locale is sufficient for the initial implementation; multi-locale voice support can be added later.
+- The en-US locale is the primary locale; multi-locale Dragon HD voices are also in scope and the voice dropdown will support multiple locales.
+
+## Clarifications
+
+### Session 2026-03-05
+
+- Q: How should VoiceLive calls produce transcription — built-in events, separate STT, or ACS transcription? → A: Support both VoiceLive built-in transcript events and a separate Azure Speech STT pipeline, selectable by the operator in settings for flexibility.
+- Q: What should happen when VoiceLive disconnects mid-call? → A: Attempt up to 3 reconnects with exponential backoff; show clear reconnection status to the operator (e.g., "Reconnecting… attempt 2/3"); allow the operator to manually end the call at any time during reconnection.
+- Q: Should operators be able to select the LLM model for VoiceLive calls? → A: Yes, expose a model dropdown in the operator settings UI (GPT-5, GPT-4.1, GPT-4o, Phi-4) so operators can choose the model per their needs.
+- Q: What should be explicitly out of scope? → A: Custom voices/avatars, inbound call support, and VoiceLive billing/usage tracking are out of scope. Multi-locale voices are IN scope.
+- Q: Which Azure.AI.VoiceLive NuGet version to target? → A: Start with GA 1.0.0 for stability; document beta 1.1.0-beta.3 features to evaluate for future upgrade.
 
 ## Dependencies
 
-- **Azure.AI.VoiceLive** NuGet package (1.0.0 GA or 1.1.0-beta.3)
+- **Azure.AI.VoiceLive** NuGet package — target **1.0.0 GA** for production stability. Beta-only features in 1.1.0-beta.3 to evaluate for future upgrade include: enhanced transcript event metadata, additional turn detection modes, and any new voice configuration options added post-GA.
 - An Azure AI Speech or Microsoft Foundry resource with VoiceLive enabled
 - Managed Identity role assignment for the app service to access the VoiceLive resource
 - Existing ACS Call Automation media streaming infrastructure (already in place)
