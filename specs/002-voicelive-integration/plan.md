@@ -61,6 +61,7 @@ ContactCenter-API/
 │   ├── OperatorSettings.cs          # MODIFY: Add TranscriptionMode, VoiceLiveModel, VoiceLive voices
 │   ├── ActiveCall.cs                # MODIFY: Add VoiceApiMode tracking per-call
 │   ├── acsMediaStreamingHandler.cs  # MODIFY: Dispatch to VoiceLive or OpenAI based on mode
+│   ├── VoiceLiveConfig.cs           # NEW: VoiceLive configuration options class
 │   └── VoiceLiveVoices.cs           # NEW: Dragon HD voice catalog (multi-locale)
 ├── Services/
 │   ├── AzureOpenAIService.cs        # EXISTING: No changes (OpenAI Realtime path)

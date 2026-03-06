@@ -2,6 +2,8 @@
 
 **Feature**: 002-voicelive-integration | **Date**: 2026-03-05
 
+> **Terminology**: `VoiceLive` (no space) is used for code values, JSON fields, and entity names. "Voice Live" (with space) is the user-facing UI label.
+
 ## Entity Definitions
 
 ### OperatorSettings (MODIFY existing)
@@ -115,6 +117,7 @@ public record VoiceLiveVoiceInfo(string FullName, string DisplayName, string Loc
 
 ### VoiceLiveConfig (NEW — app settings binding)
 
+**File**: `ContactCenter-API/Models/VoiceLiveConfig.cs`
 **Bound from**: `appsettings.json` → `VoiceLive` section
 
 | Property | Type | Default | Notes |

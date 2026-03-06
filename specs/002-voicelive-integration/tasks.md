@@ -21,13 +21,13 @@
 
 - [ ] T001 Install Azure.AI.VoiceLive 1.0.0 NuGet package in ContactCenter-API/ContactCenter-API.csproj
 - [ ] T002 [P] Add VoiceLive configuration section to ContactCenter-API/appsettings.json
-- [ ] T003 [P] Create VoiceLiveConfig options class and bind from configuration in ContactCenter-API/Program.cs
+- [ ] T003 [P] Create VoiceLiveConfig options class in ContactCenter-API/Models/VoiceLiveConfig.cs and bind from configuration in ContactCenter-API/Program.cs
 
 **Details**:
 
 - **T001**: `dotnet add ContactCenter-API/ContactCenter-API.csproj package Azure.AI.VoiceLive --version 1.0.0`
 - **T002**: Add `"VoiceLive": { "EndpointUri": "", "Key": "" }` section per quickstart.md
-- **T003**: Create `VoiceLiveConfig` class (see data-model.md) with `EndpointUri`, `Key`, `IsConfigured` property. Register with `builder.Services.Configure<VoiceLiveConfig>(builder.Configuration.GetSection("VoiceLive"))` and also `builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<VoiceLiveConfig>>().Value)` for direct injection.
+- **T003**: Create `VoiceLiveConfig` class in **ContactCenter-API/Models/VoiceLiveConfig.cs** (see data-model.md) with `EndpointUri`, `Key`, `IsConfigured` property. Register in Program.cs with `builder.Services.Configure<VoiceLiveConfig>(builder.Configuration.GetSection("VoiceLive"))` and also `builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<VoiceLiveConfig>>().Value)` for direct injection.
 
 ---
 
@@ -63,7 +63,7 @@
 
 **Independent Test**: Open settings → select "Voice Live" → select a model → save → initiate a call → verify audio flows through VoiceLive WebSocket → simulate disconnect → verify reconnection attempts with status indicator → verify operator can abort during reconnect
 
-**Maps to**: FR-001, FR-002, FR-003, FR-007, FR-010, FR-013, FR-014, FR-015, FR-018, FR-019, FR-020, FR-021, FR-022, SC-001, SC-002, SC-005, SC-007, SC-008
+**Maps to**: FR-001, FR-002, FR-003, FR-007, FR-010, FR-013, FR-014, FR-015, FR-018, FR-019, FR-020, FR-021, FR-022, FR-024, SC-001, SC-002, SC-005, SC-007, SC-008
 
 ### Implementation for User Story 1
 
@@ -80,11 +80,11 @@
 
 **Details**:
 
-- **T010**: Mirror `AzureOpenAIService` pattern (see research.md §9). Create `VoiceLiveClient` with endpoint + `DefaultAzureCredential` (or `AzureKeyCredential` if key provided). Session lifecycle: `StartSessionAsync(model)` → `ConfigureSessionAsync(options)` with voice, system prompt, echo cancellation, noise suppression, Azure Semantic VAD per research.md §7. Audio format: PCM16 matching ACS format (research.md §3). Event loop: `GetUpdatesAsync()` processing audio deltas, transcripts, errors. `SendInputAudioAsync()` for forwarding ACS audio.
+- **T010**: Mirror `AzureOpenAIService` pattern (see research.md §9). Create `VoiceLiveClient` with endpoint + `DefaultAzureCredential` (or `AzureKeyCredential` if key provided). Session lifecycle: `StartSessionAsync(model)` → `ConfigureSessionAsync(options)` with voice, system prompt, echo cancellation, noise suppression, Azure Semantic VAD per research.md §7. Audio format: PCM16 matching ACS format (research.md §3). Event loop: `GetUpdatesAsync()` processing audio deltas, transcripts, errors. `SendInputAudioAsync()` for forwarding ACS audio. **Acceptance criterion**: Verify ACS audio format (Pcm24KMono = 24kHz) is compatible with VoiceLive input; if ACS sends 24kHz, configure VoiceLive for 24kHz input/output accordingly. If formats don’t match, this is a blocker requiring resampling or ACS format reconfiguration.
 - **T011**: Register as transient/scoped service. Inject `VoiceLiveConfig`, `ILogger<VoiceLiveService>`, `IHubContext<TranscriptHub>`.
 - **T012**: In `ProcessWebSocketAsync()`, check `VoiceApiMode` from the call's active settings. If `"VoiceLive"`: create and use `VoiceLiveService`. If `"ChatGPT"`: use existing `AzureOpenAIService`. No abstract factory — simple `if/switch` per Constitution I.
 - **T013**: When creating `ActiveCall`, copy `VoiceApiMode` and `VoiceLiveModel` from current `OperatorSettings` and freeze them for the call's duration. Pass these to the media streaming handler creation.
-- **T014**: On WebSocket close or `SessionUpdateError`, start reconnection timer. Create new session with same options. If success: resume audio forwarding (note: conversation context is lost — research.md §8). If all 3 attempts fail: end call gracefully.
+- **T014**: On WebSocket close or `SessionUpdateError`, start reconnection timer. Create new session with same options. If success: resume audio forwarding (note: conversation context is lost — research.md §8). If all 3 attempts fail: end call gracefully. Also handle rate-limit and quota-exhaustion errors (`SessionUpdateError` with throttling codes): surface a clear notification to the operator via SignalR (FR-024) and do not retry.
 - **T015**: Broadcast `CallStatusChanged` with status `"Reconnecting"` (message: "Reconnecting… attempt N/3") and `"ReconnectFailed"` (message: "All reconnection attempts failed"). See data-model.md SignalR Events.
 - **T016**: Log `Information` with engine type, voice, and model when call starts. Log `Warning` on reconnection attempts.
 - **T017**: Remove `disabled` attribute and "Coming Soon" badge from VoiceLive radio. Add conditional badge: show "Not Configured" (disabled) when `voiceLiveConfigured == false`, show enabled when `true`. Add AI Model `<select>` element below voice dropdown, visible only when VoiceLive is selected.
@@ -133,6 +133,7 @@
 
 - [ ] T024 [US3] Implement built-in VoiceLive transcript event handling (user speech + AI speech events) in ContactCenter-API/Services/VoiceLiveService.cs
 - [ ] T025 [US3] Forward VoiceLive transcript events to SignalR TranscriptHub using existing transcript entry format in ContactCenter-API/Services/VoiceLiveService.cs
+- [ ] T025a [US3] Install Microsoft.CognitiveServices.Speech NuGet package in ContactCenter-API/ContactCenter-API.csproj (required only if SeparateSTT is implemented)
 - [ ] T026 [US3] Implement SeparateSTT pipeline using Azure Speech SDK SpeechRecognizer running alongside VoiceLive audio stream in ContactCenter-API/Services/VoiceLiveService.cs
 - [ ] T027 [P] [US3] Add Transcription Source dropdown (visible only when VoiceLive is selected, options: Built-in / Separate STT) in ContactCenter-APP/Pages/Index.cshtml
 - [ ] T028 [US3] Update site.js for transcription mode toggle visibility, save/load of transcriptionMode setting in ContactCenter-APP/wwwroot/js/site.js
@@ -142,10 +143,10 @@
 
 - **T024**: In the `GetUpdatesAsync()` event loop (T010), handle: `SessionUpdateConversationItemInputAudioTranscriptionCompleted` → user transcript; `SessionUpdateResponseAudioTranscriptDelta` / done → AI transcript. Extract `Transcript` / `Delta` text. See research.md §5 for event mapping. For non-realtime models (gpt-4o, gpt-4.1, gpt-5, phi-4-mini), transcription uses `azure-speech` input model.
 - **T025**: Format transcript entries to match existing `AzureOpenAIService` output format. Send via `IHubContext<TranscriptHub>` using same method names (`ReceiveTranscription` or equivalent). This ensures the frontend transcript panel works without changes.
-- **T026**: When `TranscriptionMode == "SeparateSTT"`: create `SpeechRecognizer` with the same Azure Speech resource. Feed the call audio (from ACS) into the recognizer alongside VoiceLive. Forward recognized text as transcript entries. When `TranscriptionMode == "BuiltIn"`: skip this pipeline (use T024/T025 instead). Note: This adds complexity — consider if the built-in transcription quality is sufficient for MVP.
+- **T026**: Prerequisite: T025a (Speech SDK NuGet). When `TranscriptionMode == "SeparateSTT"`: create `SpeechRecognizer` with the same Azure Speech resource. Feed the call audio (from ACS) into the recognizer alongside VoiceLive. Forward recognized text as transcript entries. When `TranscriptionMode == "BuiltIn"`: skip this pipeline (use T024/T025 instead). Note: This adds complexity — consider if the built-in transcription quality is sufficient for MVP.
 - **T027**: Add `<select id="transcriptionSource">` with options `"BuiltIn"` ("Built-in (VoiceLive)") and `"SeparateSTT"` ("Separate STT Pipeline"). Wrap in a container `div` that is shown/hidden based on VoiceLive mode selection.
 - **T028**: In `loadSettings()`: set `#transcriptionSource` value from `transcriptionMode`. In `saveSettings()`: include `transcriptionMode` in PUT body. Toggle visibility: show only when VoiceLive radio is selected.
-- **T029**: Verify that the transcript accumulator in `CallService` (used for post-call OpenAI analysis) receives VoiceLive transcripts the same way as ChatGPT transcripts. The sentiment/emotion/summary call should work identically since it operates on the accumulated transcript text, not the source.
+- **T029**: Verify that the transcript accumulator in `CallService` (used for post-call OpenAI analysis) receives VoiceLive transcripts the same way as ChatGPT transcripts. The sentiment/emotion/summary call should work identically since it operates on the accumulated transcript text, not the source. Also verify that VoiceLive calls respect `maxCallTimeMinutes` auto-hangup identically to ChatGPT Realtime calls.
 
 **Checkpoint**: Full transcript and analysis feature parity between VoiceLive and ChatGPT Realtime modes
 
@@ -184,7 +185,7 @@
 - [ ] T035 [P] Update SettingsControllerContractTests for new VoiceLive fields in GET/PUT responses in CallCenterPOC-API.Tests/Contract/SettingsControllerContractTests.cs
 - [ ] T036 [P] Update HealthCheckContractTests for VoiceLive configuration status in response in CallCenterPOC-API.Tests/Contract/HealthCheckContractTests.cs
 - [ ] T037 Code cleanup, error handling review, and edge case hardening across all modified files
-- [ ] T038 Run quickstart.md validation steps (NuGet installed, config present, RBAC documented, health check works)
+- [ ] T038 Run quickstart.md validation steps (NuGet installed, config present, RBAC documented, health check works) and verify SC-001 (settings mode switch round-trip < 5 seconds)
 
 ---
 
@@ -282,7 +283,7 @@ The SeparateSTT pipeline (FR-017) adds significant complexity. If built-in Voice
 - [Story] label maps task to specific user story for traceability
 - All file paths are relative to repository root
 - VoiceLive conversation context is NOT retained after reconnect (research.md §8) — this is a known limitation
-- Audio format: PCM 16-bit — verify ACS 24kHz vs VoiceLive 16kHz during T010 (research.md §3 note)
+- Audio format: PCM 16-bit — **MUST verify** ACS 24kHz vs VoiceLive compatibility during T010 (see T010 acceptance criterion and research.md §3 note)
 - No abstract factories or plugin architecture — simple if/switch dispatch per Constitution I
 - Commit after each task or logical group
 - Stop at any checkpoint to validate story independently
