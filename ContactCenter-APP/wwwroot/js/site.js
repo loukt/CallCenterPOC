@@ -1938,12 +1938,18 @@
         var transcriptionGroup = document.getElementById("transcriptionSourceGroup");
         var voiceSelect = document.getElementById("settingsVoice");
         var voiceGroup = voiceSelect ? voiceSelect.closest(".settings-group") : null;
+        var voiceLabel = voiceGroup ? voiceGroup.querySelector(".settings-label") : null;
+        var voiceDesc = voiceGroup ? voiceGroup.querySelector(".settings-description") : null;
 
         if (mode === "VoiceLive") {
             // Show VoiceLive model dropdown
             if (modelGroup) modelGroup.classList.remove("d-none");
             // Show transcription source
             if (transcriptionGroup) transcriptionGroup.classList.remove("d-none");
+
+            // Update voice label and description for VoiceLive
+            if (voiceLabel) voiceLabel.textContent = "Dragon HD Voice";
+            if (voiceDesc) voiceDesc.textContent = "Choose the Dragon HD voice used by the AI agent during VoiceLive calls.";
 
             // Swap voice dropdown to Dragon HD voices
             if (voiceSelect && window._vlAvailableVoices && window._vlAvailableVoices.length > 0) {
@@ -1969,7 +1975,7 @@
                     }).forEach(function (v) {
                         var opt = document.createElement("option");
                         opt.value = v.fullName;
-                        opt.textContent = v.displayName + " (" + locale + ")";
+                        opt.textContent = v.displayName + " (" + locale + ") — " + v.gender;
                         optgroup.appendChild(opt);
                     });
                     voiceSelect.appendChild(optgroup);
@@ -1984,6 +1990,10 @@
             if (modelGroup) modelGroup.classList.add("d-none");
             // Hide transcription source
             if (transcriptionGroup) transcriptionGroup.classList.add("d-none");
+
+            // Restore voice label and description for ChatGPT
+            if (voiceLabel) voiceLabel.textContent = "AI Voice";
+            if (voiceDesc) voiceDesc.textContent = "Choose the voice used by the AI agent during calls.";
 
             // Restore OpenAI voices
             if (voiceSelect) {
