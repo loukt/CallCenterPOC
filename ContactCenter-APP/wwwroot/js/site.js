@@ -877,7 +877,6 @@
         } else {
             removeReconnectBanner(callConnectionId);
         }
-        }
 
         // Stop timer on Disconnected or Failed
         if (statusStr === "Disconnected" || statusStr === "Failed") {
