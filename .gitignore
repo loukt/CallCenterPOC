@@ -363,3 +363,55 @@ MigrationBackup/
 FodyWeavers.xsd
 /ContactCenterPOC-API/myappsettings.json
 /CallCenterPOC-App/myappsettings.json
+
+# ===== Project-specific artifacts =====
+
+# Debug / troubleshooting text files
+/aoai-*.txt
+/aoai-*.json
+/az-*.txt
+/az-*.json
+/api-appsettings*.txt
+/api-appsettings*.json
+/api-docker*.txt
+/api-logconfig*.txt
+/api-logtail*.txt
+/api-restart*.txt
+/api-run*.txt
+/app-run*.txt
+/callhistory-*.txt
+/callhistory-*.json
+/deploy-*.txt
+/pe-*.json
+/pe-*.txt
+/update-*.json
+/zg-*.txt
+/zonegroup-*.txt
+/zonegroup-*.json
+/healthz-check.txt
+/test-output.txt
+/deployed-app.html
+/deployed-site.js
+/appservice-logs*.txt
+/aoai-sentiment-resp.json
+
+# Log archive directories
+api-logs/
+api-logs-latest/
+api-logs-latest2/
+api-logs-unzipped/
+
+# Build / publish output
+publish/
+*.zip
+
+# Test project (kept locally, not in repo)
+CallCenterPOC-API.Tests/
+
+# Internal tooling
+.specify/
+.vscode/
+.github/agents/
+.github/prompts/
+specs/
+scripts/
