@@ -409,3 +409,11 @@ publish/
 
 # Test project (not shared publicly)
 CallCenterPOC-API.Tests/
+
+# Internal tooling and IDE config
+.specify/
+.vscode/
+.github/agents/
+.github/prompts/
+specs/
+scripts/
