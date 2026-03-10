@@ -1,6 +1,6 @@
-# AI Call Center — Virtual Agent POC
+# Azure AI Contact Center
 
-An AI-powered call center proof-of-concept built with .NET 9, Azure Communication Services, and Azure OpenAI. The solution initiates outbound phone calls where an AI agent converses with the recipient in real time, then provides sentiment analysis, emotion detection, and call summaries.
+An AI-powered contact center proof-of-concept built with .NET 9, Azure Communication Services, and Azure OpenAI. The solution initiates outbound phone calls where an AI agent converses with the recipient in real time, then provides sentiment analysis, emotion detection, and call summaries.
 
 ## Features
 
@@ -15,20 +15,55 @@ An AI-powered call center proof-of-concept built with .NET 9, Azure Communicatio
 
 ## Architecture
 
-```
-┌─────────────────┐     HTTPS      ┌──────────────────┐
-│  ContactCenter   │◄──────────────►│  ContactCenter    │
-│  APP (Frontend)  │                │  API (Backend)    │
-│  Razor Pages     │                │  ASP.NET Core     │
-└─────────────────┘                └────────┬─────────┘
-                                            │
-        ┌───────────────┬───────────────┬───┴──────────────┐
-        ▼               ▼               ▼                  ▼
-┌──────────────┐ ┌─────────────┐ ┌────────────┐   ┌──────────────┐
-│ Azure Comm.  │ │ Azure OpenAI│ │ Azure      │   │ Azure Blob   │
-│ Services     │ │ (GPT-4o /   │ │ VoiceLive  │   │ Storage      │
-│ (Phone Calls)│ │  Whisper)   │ │ (Optional) │   │ (Persistence)│
-└──────────────┘ └─────────────┘ └────────────┘   └──────────────┘
+```mermaid
+graph TB
+    subgraph User["Operator Dashboard"]
+        APP["ContactCenter-APP<br/>(Razor Pages)"]
+    end
+
+    subgraph Azure["Azure Cloud"]
+        subgraph AppServices["Azure App Service"]
+            API["ContactCenter-API<br/>(ASP.NET Core)"]
+            HUB["SignalR Hub<br/>/transcriptHub"]
+        end
+
+        subgraph AI["Azure AI Services"]
+            AOAI["Azure OpenAI<br/>gpt-4o-realtime-preview<br/>gpt-4o-mini"]
+            VL["Azure VoiceLive<br/>(Optional)"]
+            WHISPER["Whisper<br/>Transcription"]
+        end
+
+        ACS["Azure Communication<br/>Services<br/>(Call Automation)"]
+        BLOB["Azure Blob Storage<br/>campaigns · settings<br/>call history · recordings"]
+    end
+
+    PHONE["Phone Recipient<br/>(PSTN)"]
+
+    APP -- "REST API<br/>Initiate / Hangup / History" --> API
+    APP -. "WebSocket<br/>Live Transcripts" .-> HUB
+    API --> HUB
+
+    API -- "Outbound Call<br/>Start Recording" --> ACS
+    ACS -- "Webhook Callbacks<br/>CallConnected / Disconnected" --> API
+    ACS <-- "PSTN<br/>Voice Call" --> PHONE
+
+    API -- "Realtime Voice<br/>(ChatGPT mode)" --> AOAI
+    API -- "Realtime Voice<br/>(VoiceLive mode)" --> VL
+    API -- "Sentiment · Emotion<br/>Summaries" --> AOAI
+    API -- "Audio to Text" --> WHISPER
+
+    API -- "Persist & Retrieve<br/>Data" --> BLOB
+    ACS -- "Store Recordings" --> BLOB
+
+    classDef azure fill:#0078D4,stroke:#005A9E,color:#fff
+    classDef app fill:#4CAF50,stroke:#388E3C,color:#fff
+    classDef phone fill:#FF9800,stroke:#F57C00,color:#fff
+    classDef ai fill:#7B1FA2,stroke:#6A1B9A,color:#fff
+
+    class ACS,BLOB azure
+    class APP,API,HUB app
+    class PHONE phone
+    class AOAI,VL,WHISPER ai
 ```
 
 ## Prerequisites
