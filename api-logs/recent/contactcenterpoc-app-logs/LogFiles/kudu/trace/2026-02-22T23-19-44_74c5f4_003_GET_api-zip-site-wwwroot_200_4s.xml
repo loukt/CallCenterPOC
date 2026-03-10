@@ -1,4 +1,0 @@
-<step title="Incoming Request" date="2026-02-22T23:19:44.223" instance="74c5f4" url="/api/zip/site/wwwroot/" method="GET" type="request" pid="831,1,5" Accept="application/json, text/json" Host="contactcenterpoc-app.scm.azurewebsites.net" Authorization="Bea..." traceparent="00-d5f5040184d752f157309fed3efef0dd-d4fe765577fc5bf2-01" X-ARR-LOG-ID="569f92d4-adef-4ba6-8fba-73782440556e" CLIENT-IP="172.212.246.14:59437" X-SITE-DEPLOYMENT-ID="contactcenterpoc-app" WAS-DEFAULT-HOSTNAME="contactcenterpoc-app.scm.azurewebsites.net" X-Forwarded-Proto="https" X-AppService-Proto="https" X-Forwarded-TlsVersion="1.3" X-WAWS-Unencoded-URL="/api/zip/site/wwwroot/" X-Client-IP="172.212.246.14" X-Client-Port="59437" >
-  <step title="Cleanup Xml Logs" date="2026-02-22T23:19:44.227" /><!-- duration: 6ms -->
-  <step title="Outgoing response" date="2026-02-22T23:19:48.628" type="response" statusCode="200" statusText="OK" /><!-- duration: 5ms -->
-</step><!-- duration: 4412ms -->

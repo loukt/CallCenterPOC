@@ -1,7 +1,0 @@
-<step title="Incoming Request" date="2025-01-30T14:40:18.702" instance="739096" url="/api/deployments/temp-ecfb424f/log/83395788-0ac4-4045-855c-49326424ede6" method="GET" type="request" pid="86,1,17" Host="contactcenterpoc-api.scm.azurewebsites.net" User-Agent="vscode-azureappservice/0.25.4 core-rest-pipeline/1.16.3 Node/20.18.1 OS/(x64-Windows_NT-10.0.26100)" Accept-Encoding="gzip,deflate" Accept-Language="en" Authorization="Bea..." x-ms-correlation-request-id="44432dd9-bb45-4d62-839c-eda53efb8f68" x-ms-client-request-id="54209344-a099-43a5-b3b4-0b0d167aa114" X-ARR-LOG-ID="54209344-a099-43a5-b3b4-0b0d167aa114" CLIENT-IP="132.147.119.39:3242" X-SITE-DEPLOYMENT-ID="contactcenterpoc-api" WAS-DEFAULT-HOSTNAME="contactcenterpoc-api.scm.azurewebsites.net" X-Forwarded-Proto="https" X-AppService-Proto="https" X-Forwarded-TlsVersion="1.3" X-WAWS-Unencoded-URL="/api/deployments/temp-ecfb424f/log/83395788-0ac4-4045-855c-49326424ede6" X-Client-IP="132.147.119.39" X-Client-Port="3242" >
-  <step title="Cleanup Xml Logs" date="2025-01-30T14:40:18.721" /><!-- duration: 23ms -->
-  <step title="DeploymentService.GetLogEntryDetails" date="2025-01-30T14:40:19.142" >
-    <step title="DeploymentManager.GetLogEntryDetails(id:temp-ecfb424f, entryId:83395788-0ac4-4045-855c-49326424ede6" date="2025-01-30T14:40:19.200" /><!-- duration: 31ms -->
-  </step><!-- duration: 108ms -->
-  <step title="Outgoing response" date="2025-01-30T14:40:19.270" type="response" statusCode="200" statusText="OK" /><!-- duration: 3ms -->
-</step><!-- duration: 578ms -->
