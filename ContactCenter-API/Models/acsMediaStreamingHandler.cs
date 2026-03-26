@@ -79,7 +79,7 @@ namespace ContactCenterPOC.Models
                 _logger.LogInformation("[MediaStream-{CallId}] Dispatching to VoiceLiveService (model={Model}, voice={Voice})",
                     _callConnectionId, _voiceLiveModel, _selectedVoiceLiveVoice);
                 m_vlServiceHandler = new VoiceLiveService(this, callContextPrompt, _voiceLiveConfig, _logger, _hubContext,
-                    _callConnectionId, _voiceLiveModel ?? "gpt-4o", _selectedVoiceLiveVoice,
+                    _callConnectionId, _voiceLiveModel ?? "gpt-4o-realtime-preview", _selectedVoiceLiveVoice,
                     _hangUpCallback, _sentimentService, _activeCalls, _emotionService);
 
                 try

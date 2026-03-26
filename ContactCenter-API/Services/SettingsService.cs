@@ -51,6 +51,13 @@ namespace ContactCenterPOC.Services
 
                 var settings = await LoadFromBlobAsync();
                 _cached = settings ?? new OperatorSettings();
+
+                // Validate loaded settings against current valid models
+                if (!OperatorSettings.ValidVoiceLiveModels.Contains(_cached.VoiceLiveModel))
+                {
+                    _cached.VoiceLiveModel = "gpt-4o-realtime-preview";
+                }
+
                 _cachedAt = DateTimeOffset.UtcNow;
                 return _cached;
             }
@@ -82,8 +89,8 @@ namespace ContactCenterPOC.Services
                 {
                     if (!OperatorSettings.ValidVoiceLiveModels.Contains(settings.VoiceLiveModel))
                     {
-                        _logger.LogWarning("Unknown VoiceLiveModel '{Model}', defaulting to 'gpt-4o'", settings.VoiceLiveModel);
-                        settings.VoiceLiveModel = "gpt-4o";
+                        _logger.LogWarning("Unknown VoiceLiveModel '{Model}', defaulting to 'gpt-4o-realtime-preview'", settings.VoiceLiveModel);
+                        settings.VoiceLiveModel = "gpt-4o-realtime-preview";
                     }
 
                     if (!VoiceLiveVoices.ValidNames.Contains(settings.SelectedVoiceLiveVoice))

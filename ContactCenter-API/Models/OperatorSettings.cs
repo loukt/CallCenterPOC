@@ -8,7 +8,7 @@ namespace ContactCenterPOC.Models
 
         // VoiceLive-specific fields
         public string TranscriptionMode { get; set; } = "BuiltIn";  // "BuiltIn" or "SeparateSTT"
-        public string VoiceLiveModel { get; set; } = "gpt-4o";
+        public string VoiceLiveModel { get; set; } = "gpt-4o-realtime-preview";
         public string SelectedVoiceLiveVoice { get; set; } = "en-US-Ava:DragonHDLatestNeural";
 
         public static readonly HashSet<string> ValidVoices = new(StringComparer.OrdinalIgnoreCase)
@@ -18,7 +18,7 @@ namespace ContactCenterPOC.Models
 
         public static readonly HashSet<string> ValidVoiceLiveModels = new(StringComparer.OrdinalIgnoreCase)
         {
-            "gpt-4o", "gpt-4.1", "gpt-5"
+            "gpt-4o-realtime-preview", "gpt-4o-mini-realtime-preview"
         };
 
         public static readonly HashSet<string> ValidTranscriptionModes = new(StringComparer.OrdinalIgnoreCase)

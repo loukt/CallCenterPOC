@@ -37,7 +37,7 @@ namespace ContactCenterPOC.Services
             ILogger<CallService> logger,
             IHubContext<TranscriptHub> hubContext,
             string callConnectionId,
-            string model = "gpt-4o",
+            string model = "gpt-4o-realtime-preview",
             string? selectedVoice = null,
             Func<string, Task>? hangUpCallback = null,
             SentimentAnalysisService? sentimentService = null,

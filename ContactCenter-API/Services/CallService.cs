@@ -163,7 +163,7 @@ namespace ContactCenterPOC.Services
                 var maxCallMinutes = 2.0;
                 // Freeze VoiceApiMode and VoiceLiveModel from current settings (FR-014)
                 var frozenVoiceApiMode = "ChatGPT";
-                var frozenVoiceLiveModel = "gpt-4o";
+                var frozenVoiceLiveModel = "gpt-4o-realtime-preview";
                 var frozenVoiceLiveVoice = "en-US-Ava:DragonHDLatestNeural";
                 var frozenSelectedVoice = "alloy";
                 if (_settingsService != null)
@@ -264,7 +264,7 @@ namespace ContactCenterPOC.Services
                     // Read voice and VoiceLive settings from frozen ActiveCall state
                     var selectedVoice = "alloy";
                     var voiceApiMode = activeCall.VoiceApiMode;
-                    var voiceLiveModel = activeCall.VoiceLiveModel ?? "gpt-4o";
+                    var voiceLiveModel = activeCall.VoiceLiveModel ?? "gpt-4o-realtime-preview";
                     var voiceLiveVoice = activeCall.VoiceLiveVoice ?? "en-US-Ava:DragonHDLatestNeural";
                     if (_settingsService != null)
                     {
