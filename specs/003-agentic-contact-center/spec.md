@@ -1,0 +1,404 @@
+# Feature Specification: Agentic Contact Center
+
+**Feature Branch**: `003-agentic-contact-center`  
+**Created**: 2026-03-27  
+**Status**: Draft  
+**Input**: Evolve the solution to an agentic architecture with specialized AI agents (Customer Intent Agent, Case Management Agent, Knowledge Management Agent, Quality Evaluation Agent), add knowledge base ingestion (PDF/DOC via Azure AI Search), support inbound calls, and enable non-ACS calling via browser-based WebRTC.
+
+---
+
+## User Scenarios & Testing *(mandatory)*
+
+### User Story 1 - Customer Intent Agent for Self-Service (Priority: P1)
+
+As a contact center administrator, I want an AI agent that autonomously discovers customer intents from past call transcripts and conversations so that future calls (inbound and outbound) are handled with contextual understanding of what the customer likely needs.
+
+**Why this priority**: Intent discovery is the foundation of the agentic system — all other agents depend on knowing why the customer is calling. Without intent, the system is just a generic chatbot.
+
+**Independent Test**: Upload or accumulate 10+ call history records, trigger intent discovery, verify the system creates an intent library with categorized intents (e.g., "billing inquiry," "appointment reschedule," "complaint"). Initiate a new call and verify the AI references discovered intents to guide the conversation.
+
+**Acceptance Scenarios**:
+
+1. **Given** the system has 10+ historical call records, **When** the administrator triggers intent discovery, **Then** the system analyzes transcripts and produces a list of discovered intents grouped into intent categories.
+2. **Given** discovered intents exist in the intent library, **When** an inbound or outbound call begins, **Then** the AI agent uses the intent library to identify the caller's likely intent within the first 30 seconds of conversation.
+3. **Given** the AI identifies a caller's intent (e.g., "billing dispute"), **When** a matching knowledge article exists, **Then** the AI uses the knowledge article to provide an accurate resolution without human intervention.
+4. **Given** the AI cannot resolve the caller's issue autonomously, **When** the confidence score falls below a configurable threshold, **Then** the system escalates to a human operator with a summary of the conversation so far, the detected intent, and suggested next steps.
+5. **Given** intent discovery runs periodically, **When** new call records accumulate, **Then** the system discovers new intents and updates existing ones without losing previously approved intents.
+
+---
+
+### User Story 2 - Knowledge Base Integration via Azure AI Search (Priority: P1)
+
+As an administrator, I want to upload documents (PDF, DOCX, TXT) to a knowledge base so that the AI agents can instantly reference accurate, company-specific information during conversations.
+
+**Why this priority**: Without a knowledge base, the AI can only use its general training data. Real contact centers need domain-specific answers about products, policies, and procedures immediately available to the agent.
+
+**Independent Test**: Upload a PDF product manual, verify it appears in the knowledge base list, initiate a call, ask a question that can only be answered from the uploaded document, and verify the AI provides the correct answer.
+
+**Acceptance Scenarios**:
+
+1. **Given** the administrator is on the Knowledge Base management page, **When** they upload a PDF document (up to 50 MB), **Then** the system extracts text, chunks it, generates embeddings, and indexes it in Azure AI Search within 2 minutes.
+2. **Given** a DOCX file is uploaded, **When** the processing completes, **Then** the document content is searchable and available for AI agent reference.
+3. **Given** multiple documents are in the knowledge base, **When** a caller asks a question related to the content, **Then** the AI performs a hybrid search (keyword + vector) and retrieves the most relevant passages to formulate its answer.
+4. **Given** the administrator wants to remove outdated information, **When** they delete a document from the knowledge base, **Then** the corresponding index entries are removed and the AI no longer references that content.
+5. **Given** a document is being processed, **When** the administrator views the knowledge base, **Then** they see the document's processing status (Uploading, Processing, Indexed, Failed).
+6. **Given** the AI uses a knowledge base article to answer a question, **When** the transcript is reviewed, **Then** the system indicates which knowledge source was used (source attribution).
+
+---
+
+### User Story 3 - Inbound Call Handling (Priority: P1)
+
+As a contact center operator, I want the system to receive and handle inbound phone calls so that customers can call in and be assisted by the AI agent or routed to a human operator.
+
+**Why this priority**: The current system only supports outbound calls. A real contact center must handle inbound traffic — this is the primary use case for most contact centers.
+
+**Independent Test**: Configure an ACS phone number for inbound routing, call the number from a real phone, verify the AI agent answers, conducts a conversation, and the call appears in the live dashboard.
+
+**Acceptance Scenarios**:
+
+1. **Given** an ACS phone number is configured for inbound routing, **When** a customer calls that number, **Then** the system accepts the call and connects the AI agent within 3 seconds.
+2. **Given** an inbound call is answered by the AI agent, **When** the caller speaks, **Then** the AI agent responds using the configured default inbound campaign and references the knowledge base.
+3. **Given** an inbound call is in progress, **When** the operator views the dashboard, **Then** the call appears in the live calls panel with an "Inbound" badge, showing real-time transcript and sentiment.
+4. **Given** the AI agent cannot resolve the caller's issue, **When** escalation is triggered, **Then** the system notifies an available operator and provides the conversation context (transcript, detected intent, suggested actions).
+5. **Given** no operators are available for escalation, **When** the AI cannot help further, **Then** the system offers to take a message or schedule a callback, and creates a case record.
+6. **Given** an inbound call arrives, **When** a campaign with inbound routing rules is configured, **Then** the system routes the call to the appropriate AI behavior based on the called number or IVR menu selection.
+7. **Given** multiple inbound calls arrive simultaneously, **When** the concurrent call limit is reached, **Then** additional callers hear a configurable hold message or are asked to call back.
+
+---
+
+### User Story 4 - Browser-Based Calling Without ACS (Priority: P2)
+
+As an operator, I want to be able to make and receive calls directly from the browser using WebRTC so that the system can function without Azure Communication Services for testing, demos, or environments where ACS is not available.
+
+**Why this priority**: ACS has per-minute telephony costs and requires PSTN number provisioning. A WebRTC option enables free browser-to-browser calls for testing, internal demos, and scenarios where real phone numbers aren't needed.
+
+**Independent Test**: Toggle the calling mode to "Browser (WebRTC)" in settings, click "Make a Call," verify a shareable call link is generated, open the link in another browser tab, verify bidirectional voice works with the AI agent in the middle.
+
+**Acceptance Scenarios**:
+
+1. **Given** the operator selects "Browser (WebRTC)" calling mode in settings, **When** they initiate a call, **Then** the system generates a unique shareable link (URL) instead of dialing a phone number.
+2. **Given** a shareable call link is generated, **When** a user opens the link in any modern browser, **Then** a lightweight call page loads with a "Join Call" button that requests microphone permission.
+3. **Given** the remote user joins the call via the link, **When** both parties are connected, **Then** bidirectional audio streams through the server with the AI agent mediating the conversation (same as ACS mode).
+4. **Given** a WebRTC call is in progress, **When** the operator views the dashboard, **Then** the call appears with a "WebRTC" badge and all features work identically (transcript, sentiment, recording, history).
+5. **Given** the system is in WebRTC mode, **When** an inbound call link is shared publicly, **Then** callers can reach the AI agent by clicking the link — functioning as a lightweight inbound channel.
+6. **Given** the operator wants to switch back to ACS mode, **When** they change the calling mode in settings, **Then** subsequent calls use ACS telephony as before (no restart required).
+
+---
+
+### User Story 5 - Case Management Agent (Priority: P2)
+
+As a contact center system, I want an AI agent that automatically creates, updates, and closes case records based on call outcomes so that operators don't have to manually manage case documentation.
+
+**Why this priority**: Manual case management is the biggest time sink for operators after a call. Automating the case lifecycle directly improves operator productivity and ensures consistent documentation.
+
+**Independent Test**: Complete a call where the customer reports an issue, verify a case is automatically created with the correct details. Complete a follow-up call about the same issue, verify the existing case is updated. Resolve the issue on a call, verify the case is closed.
+
+**Acceptance Scenarios**:
+
+1. **Given** a call ends where the customer reported a new issue, **When** the call record is saved, **Then** the Case Management Agent automatically creates a case with: title (derived from intent), description (call summary), priority (derived from sentiment and urgency), status ("Open"), and linked call record.
+2. **Given** a customer calls back about an existing open case, **When** the system matches the caller's phone number to an existing case, **Then** the Case Management Agent updates the case with the new interaction details and appends the transcript.
+3. **Given** a call ends where the issue was resolved, **When** the AI determines the customer confirmed resolution, **Then** the Case Management Agent sets the case status to "Resolved" and adds a resolution summary.
+4. **Given** the administrator wants to review all open cases, **When** they navigate to the Cases view, **Then** they see a list of all cases with status, priority, linked calls, and time since creation.
+5. **Given** a case has been in "Resolved" status for 48 hours without re-contact, **When** the auto-close window expires, **Then** the Case Management Agent changes the status to "Closed."
+
+---
+
+### User Story 6 - Knowledge Management Agent (Priority: P3)
+
+As a contact center system, I want an AI agent that identifies knowledge gaps from call outcomes and suggests new knowledge articles so that the knowledge base continuously improves.
+
+**Why this priority**: Static knowledge bases decay over time. An agent that learns from conversations ensures the knowledge base stays current and relevant, reducing unanswered queries over time.
+
+**Independent Test**: Complete several calls where the AI could not answer a question due to missing knowledge, verify the Knowledge Management Agent identifies the gap and drafts a suggested article. Review and approve the article, verify subsequent calls can answer the question.
+
+**Acceptance Scenarios**:
+
+1. **Given** the AI agent could not answer a caller's question during a call, **When** the call record is analyzed post-call, **Then** the Knowledge Management Agent flags the topic as a knowledge gap.
+2. **Given** knowledge gaps are identified, **When** the administrator views the Knowledge Gaps dashboard, **Then** they see a list of unanswered topics with frequency, most recent occurrence, and a suggested draft article.
+3. **Given** the administrator approves a suggested knowledge article, **When** they click "Publish," **Then** the article is added to the knowledge base index and immediately available for AI reference.
+4. **Given** a previously unanswerable question is now covered by a new article, **When** a caller asks the same question, **Then** the AI provides the correct answer with source attribution.
+
+---
+
+### User Story 7 - Quality Evaluation Agent (Priority: P3)
+
+As a supervisor, I want an AI agent that automatically evaluates the quality of every call (handled by AI or human) against configurable criteria so that I can monitor service quality without manually reviewing recordings.
+
+**Why this priority**: Quality assurance in contact centers is labor-intensive. Automated evaluation enables 100% call coverage instead of the typical 2-5% manual sample.
+
+**Independent Test**: Define evaluation criteria (greeting quality, issue resolution, compliance phrases), complete several calls, verify each call receives an automated quality score with per-criterion breakdown. Flag a call as "needs review" and verify it appears in the supervisor's review queue.
+
+**Acceptance Scenarios**:
+
+1. **Given** evaluation criteria are configured (e.g., "greeting quality," "issue resolution," "compliance"), **When** a call ends, **Then** the Quality Evaluation Agent scores the call on each criterion (1-5 scale) and generates an overall quality score.
+2. **Given** a call scores below the minimum quality threshold (configurable), **When** the evaluation completes, **Then** the system flags the call for supervisor review and sends a notification.
+3. **Given** the supervisor views the Quality Dashboard, **When** they select a time period, **Then** they see average quality scores, trend charts, and a list of flagged calls sorted by severity.
+4. **Given** the supervisor wants to review a flagged call, **When** they click on it, **Then** they see the full transcript, per-criterion scores with justifications, and the AI's reasoning for each score.
+5. **Given** evaluation criteria are updated, **When** new calls are evaluated, **Then** the updated criteria are applied (existing evaluations are not retroactively changed).
+
+---
+
+## Functional Requirements *(mandatory)*
+
+### Intent & Knowledge
+
+- **FR-001**: The system shall analyze historical call transcripts to discover and categorize customer intents into an intent library.
+- **FR-002**: The system shall support uploading documents in PDF, DOCX, and TXT formats (up to 50 MB each) to a knowledge base.
+- **FR-003**: The system shall extract text from uploaded documents, chunk it, generate vector embeddings, and index it in Azure AI Search.
+- **FR-004**: The system shall perform hybrid search (keyword + semantic vector) against the knowledge base when answering questions during calls.
+- **FR-005**: The system shall attribute AI responses to specific knowledge sources when knowledge base content is used.
+- **FR-006**: The system shall support creating, viewing, and deleting knowledge base documents through a management interface.
+
+### Inbound Call Handling
+
+- **FR-007**: The system shall accept inbound calls on configured ACS phone numbers and route them to the AI agent.
+- **FR-008**: The system shall support configurable inbound routing rules that map phone numbers to specific campaigns or AI behaviors.
+- **FR-009**: The system shall support AI-to-operator escalation during inbound calls, including conversation context transfer.
+- **FR-010**: The system shall distinguish inbound and outbound calls visually in the dashboard and call history.
+- **FR-011**: The system shall handle concurrent inbound and outbound calls up to the configured maximum (default: 5 total).
+
+### Browser-Based Calling (WebRTC)
+
+- **FR-012**: The system shall support an alternative WebRTC calling mode that operates without ACS.
+- **FR-013**: The system shall generate shareable call links when in WebRTC mode, allowing any browser user to join a call.
+- **FR-014**: The system shall establish peer-to-peer audio connections through a signaling server, with the AI agent processing audio in the same pipeline as ACS calls.
+- **FR-015**: The system shall support switching between ACS and WebRTC calling modes without application restart.
+
+### Case Management
+
+- **FR-016**: The system shall automatically create case records from call outcomes, including derived title, description, priority, and linked call records.
+- **FR-017**: The system shall match returning callers to existing open cases by phone number or caller identification.
+- **FR-018**: The system shall automatically update case records when follow-up calls occur on the same issue.
+- **FR-019**: The system shall automatically close cases after a configurable period in "Resolved" status without re-contact (default: 48 hours).
+- **FR-020**: The system shall provide a Cases view for operators and supervisors to manage open, resolved, and closed cases.
+
+### Knowledge Management Agent
+
+- **FR-021**: The system shall analyze call outcomes to identify questions the AI could not answer (knowledge gaps).
+- **FR-022**: The system shall generate draft knowledge articles for identified knowledge gaps.
+- **FR-023**: The system shall support a review-and-publish workflow for suggested knowledge articles.
+
+### Quality Evaluation
+
+- **FR-024**: The system shall automatically evaluate completed calls against configurable quality criteria.
+- **FR-025**: The system shall generate per-criterion scores (1-5 scale) and an overall quality score for each call.
+- **FR-026**: The system shall flag calls below a configurable quality threshold for supervisor review.
+- **FR-027**: The system shall provide a Quality Dashboard with trend analytics, average scores, and flagged call lists.
+
+---
+
+## Success Criteria *(mandatory)*
+
+1. **Intent Recognition Accuracy**: The AI correctly identifies caller intent in at least 80% of calls where intent is discoverable from the knowledge base and historical data.
+2. **Knowledge Base Response Time**: Uploaded documents are searchable within 2 minutes of upload completion.
+3. **Inbound Call Answer Time**: The system answers inbound calls and connects the AI agent within 3 seconds of the call being received.
+4. **Case Auto-Creation Rate**: At least 90% of calls that involve a customer issue result in an automatically created or updated case record.
+5. **Quality Evaluation Coverage**: 100% of completed calls receive an automated quality evaluation within 60 seconds of call completion.
+6. **WebRTC Call Quality**: Browser-to-browser calls maintain conversational audio quality (no perceptible lag or dropout) for calls up to 10 minutes.
+7. **Escalation Success Rate**: When the AI escalates to a human operator, 100% of escalations include the full conversation context (transcript, intent, suggested actions).
+8. **Knowledge Gap Detection**: The system identifies at least 70% of repeated unanswered questions within the first week of operation.
+9. **Operator Efficiency**: Operators spend less than 1 minute on post-call documentation per call due to automated case management.
+10. **All Existing Features Preserved**: All current capabilities (outbound calling, campaigns, sentiment analysis, emotion analysis, call history, VoiceLive voices, settings management) continue to function without regression.
+
+---
+
+## Key Entities *(mandatory)*
+
+### Intent
+
+| Field | Type | Description |
+|-------|------|-------------|
+| Id | string (GUID) | Unique identifier |
+| Name | string | Human-readable intent name (e.g., "Billing Dispute") |
+| GroupName | string | Intent category group |
+| Description | string | What this intent represents |
+| Status | enum | Pending, Approved, Discarded |
+| Frequency | int | How often this intent has been detected |
+| SampleUtterances | string[] | Example caller phrases that match this intent |
+| LinkedKnowledgeArticles | string[] | Knowledge article IDs relevant to this intent |
+| CreatedAt | DateTimeOffset | When the intent was first discovered |
+
+### KnowledgeDocument
+
+| Field | Type | Description |
+|-------|------|-------------|
+| Id | string (GUID) | Unique identifier |
+| FileName | string | Original file name |
+| FileType | string | PDF, DOCX, TXT |
+| FileSizeBytes | long | File size |
+| Status | enum | Uploading, Processing, Indexed, Failed |
+| ChunkCount | int | Number of text chunks created |
+| IndexName | string | Azure AI Search index name |
+| UploadedBy | string | Operator who uploaded |
+| UploadedAt | DateTimeOffset | Upload timestamp |
+| ErrorMessage | string? | Error details if processing failed |
+
+### Case
+
+| Field | Type | Description |
+|-------|------|-------------|
+| Id | string (GUID) | Unique identifier |
+| Title | string | Derived from intent or call summary |
+| Description | string | Case details from call transcript |
+| Status | enum | Open, InProgress, Resolved, Closed |
+| Priority | enum | Low, Medium, High, Critical |
+| CallerPhoneNumber | string | Masked phone number |
+| LinkedCallRecords | string[] | Associated call record IDs |
+| Intent | string? | Detected customer intent |
+| ResolutionSummary | string? | How the issue was resolved |
+| CreatedAt | DateTimeOffset | Case creation time |
+| UpdatedAt | DateTimeOffset | Last update time |
+| ResolvedAt | DateTimeOffset? | When marked resolved |
+| ClosedAt | DateTimeOffset? | When auto-closed |
+
+### QualityEvaluation
+
+| Field | Type | Description |
+|-------|------|-------------|
+| Id | string (GUID) | Unique identifier |
+| CallRecordId | string | Linked call record |
+| OverallScore | float | Aggregate quality score (1-5) |
+| CriterionScores | CriterionScore[] | Per-criterion breakdown |
+| Flagged | bool | Whether below quality threshold |
+| FlagReason | string? | Why the call was flagged |
+| EvaluatedAt | DateTimeOffset | Evaluation timestamp |
+
+### CriterionScore
+
+| Field | Type | Description |
+|-------|------|-------------|
+| CriterionName | string | e.g., "Greeting Quality," "Issue Resolution" |
+| Score | float | 1-5 scale |
+| Justification | string | AI's reasoning for the score |
+
+### WebRTCCallSession
+
+| Field | Type | Description |
+|-------|------|-------------|
+| SessionId | string (GUID) | Unique session identifier |
+| ShareableLink | string | URL for the remote party to join |
+| Status | enum | Waiting, Connected, Disconnected |
+| CreatedAt | DateTimeOffset | Session creation time |
+| CallerConnectionId | string? | SignalR connection ID of the caller |
+| OperatorConnectionId | string | SignalR connection ID of the operator |
+
+---
+
+## Non-Functional Requirements *(mandatory)*
+
+- **NFR-001**: Knowledge base document processing (upload to searchable) shall complete within 2 minutes for documents up to 50 MB.
+- **NFR-002**: Hybrid search queries against the knowledge base shall return results within 500 milliseconds.
+- **NFR-003**: The system shall support at least 100 documents in the knowledge base simultaneously.
+- **NFR-004**: Intent discovery shall handle analysis of up to 1,000 historical call transcripts in a single run.
+- **NFR-005**: Quality evaluations shall complete within 60 seconds of call termination.
+- **NFR-006**: WebRTC audio latency shall not exceed 200 milliseconds round-trip for browser-to-server communication.
+- **NFR-007**: The system shall maintain backward compatibility with all existing features (outbound calls, campaigns, sentiment, emotion, call history, VoiceLive, settings).
+
+---
+
+## Scope Boundaries *(mandatory)*
+
+### In Scope
+
+- Customer Intent Agent: intent discovery from historical transcripts, intent-driven conversation guidance
+- Knowledge base management: upload, process, index, search, delete documents (PDF, DOCX, TXT)
+- Azure AI Search integration: hybrid search (keyword + vector) with embeddings
+- Inbound call handling via ACS with AI agent auto-answer
+- WebRTC browser-based calling as an alternative to ACS
+- Case Management Agent: automatic case lifecycle (create, update, resolve, close)
+- Knowledge Management Agent: knowledge gap detection and article suggestion
+- Quality Evaluation Agent: automated call quality scoring against configurable criteria
+- UI/UX for all new features integrated into the existing dashboard
+- Source attribution for knowledge-based AI responses
+
+### Out of Scope
+
+- Multi-tenant architecture (single-tenant POC)
+- User authentication and role-based access control (admin vs. operator vs. supervisor are informational labels, not enforced)
+- SIP trunking or third-party telephony providers (only ACS and WebRTC)
+- Video calling (audio only)
+- Multi-language support for the UI (English only; AI conversation language is model-dependent)
+- IVR menu trees (the AI agent handles routing conversationally)
+- Workforce management (scheduling, shift planning)
+- Real-time supervisor intervention (listen-in, whisper, barge-in on live calls)
+- Payment processing or PCI compliance
+- HIPAA or other regulatory compliance beyond basic data handling
+
+---
+
+## Dependencies *(mandatory)*
+
+| Dependency | Purpose | Status |
+|------------|---------|--------|
+| Azure Communication Services | Telephony for inbound and outbound PSTN calls | Existing |
+| Azure OpenAI Service | AI agent conversation (Realtime API), sentiment, emotion, summaries, intent discovery, quality evaluation | Existing |
+| Azure AI VoiceLive | Alternative voice engine with Dragon HD voices | Existing |
+| Azure AI Search | Knowledge base indexing and hybrid retrieval | New — must be provisioned |
+| Azure Blob Storage | Document storage, call recordings, case records, knowledge articles | Existing |
+| Azure AI Document Intelligence (optional) | Enhanced PDF/DOCX text extraction for complex layouts | New — optional, can fallback to built-in extraction |
+| SignalR | Real-time transcript, sentiment, call status, WebRTC signaling | Existing |
+
+---
+
+## Assumptions *(mandatory)*
+
+1. **Azure AI Search** will be provisioned in the same region as the existing resources (Southeast Asia or compatible) with a Basic or Standard tier that supports vector search.
+2. **Document extraction** for simple PDF/DOCX files will use standard text extraction. Azure AI Document Intelligence is used only for complex layouts with tables, images, or scanned content.
+3. **Embeddings** will be generated using Azure OpenAI's `text-embedding-3-small` or equivalent deployed model.
+4. **Intent discovery** runs as a batch process (on-demand or scheduled daily), not in real-time during calls. Real-time intent detection during calls uses the pre-built intent library.
+5. **WebRTC signaling** will be handled through the existing SignalR infrastructure (no separate TURN/STUN servers for POC — uses public STUN servers like Google's for NAT traversal).
+6. **Case persistence** will use the same Blob Storage pattern as existing call history (JSON files per case).
+7. **Quality evaluation criteria** are configured by the administrator through a settings interface, with a set of default criteria provided out of the box.
+8. **Inbound call routing** in ACS will use Event Grid webhook notifications to the existing callback controller pattern.
+9. **The existing 5-call concurrent limit** applies to the total of inbound + outbound + WebRTC calls combined.
+10. **Knowledge gap detection** is a post-call batch analysis, not real-time during the call.
+
+---
+
+## UX/UI Design Direction
+
+### Dashboard Evolution
+
+The existing three-panel dashboard evolves to accommodate new features:
+
+- **Left Panel**: Adds a "Call Mode" toggle at the top (ACS / WebRTC), and an "Inbound" section showing the configured inbound number and status. Campaign selector remains below.
+- **Center Panel**: Gains an "Inbound" badge on inbound calls. When a WebRTC call generates a shareable link, a copyable link card appears. Knowledge source attribution appears inline in transcripts.
+- **Right Panel**: Adds tabs for "Cases" and "Quality" alongside existing "Live" and "History" tabs.
+
+### New Pages/Sections
+
+1. **Knowledge Base Manager** (new page or modal): Upload area (drag-and-drop), document list with processing status, search preview to test queries.
+2. **Intent Library** (new page or settings section): Discovered intents in a table with status, frequency, linked articles. Approve/discard actions.
+3. **Cases View** (integrated in right panel tab): Case list with status badges (Open/Resolved/Closed), priority indicators, linked calls expandable.
+4. **Quality Dashboard** (integrated in right panel tab or separate page): Score trend chart, flagged calls queue, criteria configuration.
+
+### WebRTC UX Flow
+
+1. Operator selects "Browser (WebRTC)" mode in the call mode toggle.
+2. Phone number fields are replaced with a "Generate Call Link" button.
+3. Clicking generates a unique URL displayed in a copyable card with a QR code.
+4. The operator shares the link via any channel (email, chat, SMS).
+5. When the remote user joins, the dashboard behaves identically to an ACS call.
+6. A lightweight "Join Call" page loads for the remote user — minimal UI with just a "Join" button, microphone permission prompt, and a simple transcript view.
+
+### Settings Additions
+
+- **Call Mode**: Toggle between "ACS (Telephony)" and "Browser (WebRTC)" — with visual indicator of current mode.
+- **Inbound Configuration**: Show configured inbound number, default inbound campaign selector.
+- **Quality Criteria**: List of evaluation criteria with name, description, weight, and minimum threshold.
+- **Knowledge Base**: Quick link to knowledge base manager from settings.
+
+---
+
+## Edge Cases
+
+- **Large document upload**: Documents exceeding 50 MB are rejected with a clear error message before upload begins.
+- **Unsupported file format**: Only PDF, DOCX, and TXT are accepted; other formats show a validation error.
+- **Knowledge base search returns no results**: The AI falls back to its general knowledge and indicates it couldn't find specific documentation.
+- **Concurrent inbound + outbound at limit**: When 5 calls are active, additional inbound callers hear a configurable "all agents busy" message.
+- **WebRTC browser compatibility**: If the browser doesn't support WebRTC (getUserMedia), the join page shows a compatibility error with supported browser suggestions.
+- **Caller hangs up during intent identification**: The system saves the partial transcript and any partially detected intent for future analysis.
+- **Case deduplication**: If the same caller calls about the same intent within 24 hours, the system updates the existing case rather than creating a new one.
+- **Quality evaluation of very short calls** (under 10 seconds): Calls shorter than 10 seconds are marked as "Too Short for Evaluation" and not scored.
+- **WebRTC NAT traversal failure**: If peer connection cannot be established, the system shows a "Connection failed — try a different network" message.
+- **Document processing failure**: Failed documents show the error reason and offer a "Retry" button.
