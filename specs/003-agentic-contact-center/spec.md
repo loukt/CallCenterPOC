@@ -16,6 +16,7 @@
 - Q: What protection should shareable WebRTC call links have against abuse? → A: Time-expiring (configurable, default 15 minutes) + single-use (invalidated after first join).
 - Q: What level of observability should the autonomous agents have? → A: Structured agent activity log + dashboard "Agent Activity" panel showing recent actions and failures.
 - Q: How should the AI behave when Azure AI Search is unavailable during a live call? → A: AI falls back to general model knowledge gracefully (no source attribution), unless the campaign explicitly restricts the agent to provided data only — in that case, the AI states it cannot answer and the failure is logged.
+- Q: Where should the escalation phone number be configured? → A: Both — default escalation number in Settings, with optional per-campaign override. Fallback chain: campaign override → settings default → dashboard-notification-only (case + callback request). For internet calls, escalation sends a dashboard notification and the operator clicks "Join Escalation."
 
 ---
 
@@ -166,6 +167,7 @@ As a supervisor, I want an AI agent that automatically evaluates the quality of 
 - **FR-007**: The system shall accept inbound calls on configured ACS phone numbers and route them to the AI agent.
 - **FR-008**: The system shall support configurable inbound routing rules that map phone numbers to specific campaigns or AI behaviors.
 - **FR-009**: The system shall support AI-to-operator escalation during calls (inbound and outbound) by adding the operator to the live call, having the AI verbally introduce the context, and then removing the AI from the call.
+- **FR-031**: The system shall support escalation number configuration at two levels: a global default escalation phone number in Settings, and an optional per-campaign escalation number override. When escalation is triggered, the system uses the campaign-level number if set, otherwise the Settings default. If no number is configured at either level, escalation creates a dashboard notification with a case and callback request instead of a live transfer. For internet-based calls, escalation sends a real-time dashboard notification and the operator clicks "Join Escalation" to be added via WebRTC.
 - **FR-010**: The system shall distinguish inbound and outbound calls visually in the dashboard and call history.
 - **FR-011**: The system shall handle concurrent inbound and outbound calls up to the configured maximum (default: 5 total).
 
@@ -390,7 +392,7 @@ As a supervisor, I want an AI agent that automatically evaluates the quality of 
 
 The existing three-panel dashboard evolves to accommodate new features:
 
-- **Left Panel**: Campaign selector remains at the top. Below it, an "Inbound" status indicator shows the configured inbound number and whether it's active (green dot) or inactive (gray dot). The phone number input section is **conditionally shown** — when "Call over Internet" is enabled in settings, the two phone number fields and contact name inputs are replaced with a "Generate Call Link" button and the resulting copyable link card + QR code.
+- **Left Panel**: Campaign selector remains at the top. Below it, an "Inbound" status indicator shows the configured inbound number and whether it's active (green dot) or inactive (gray dot). The phone number input section is **conditionally shown** — when "Call over Internet" is enabled in settings, the two phone number fields and contact name inputs are replaced with a "Generate Call Link" button and the resulting copyable link card + QR code. The campaign creation/edit form includes an optional "Escalation number" field (overrides the global default from settings).
 - **Center Panel**: Gains an "Inbound" badge on inbound calls and an "Internet" badge on internet-based calls (replacing the phone number in the call status bar). Knowledge source attribution appears inline in transcript chat bubbles as a small document icon tooltip with the source name. The center panel also hosts the **Knowledge Base Manager**, **Intent Library**, **Quality Dashboard**, and **Agent Activity** views — accessible via a top navigation bar or header links (not crammed into the right panel tabs, which are too narrow for these data-dense views).
 - **Right Panel**: Keeps the existing 2 tabs ("Live" and "History") plus adds one new tab: **"Cases"**. Cases are a compact list view (status badge, title, priority dot) that fits the narrow panel. Agent Activity and Quality Dashboard are too data-dense for the 22%-width right panel and are shown in the center panel instead.
 
@@ -425,6 +427,7 @@ The existing three-panel dashboard evolves to accommodate new features:
 - **Quality Criteria**: Editable list of evaluation criteria — each with: name, description, weight (1-10), minimum passing score (1-5). Add/remove/reorder.
 - **Campaign Data Restriction**: Per-campaign checkbox: "Restrict AI to provided data only" — prevents the AI from using general knowledge, only knowledge base content.
 - **Knowledge Base**: Quick-access link to Knowledge Base Manager.
+- **Escalation**: Default escalation phone number field (E.164 format, e.g., +1234567890). Dashboard notification is always enabled for escalations regardless of whether a number is configured. When "Call over Internet" is enabled, phone-based escalation is unavailable — escalation instead sends a real-time notification to the dashboard and the operator clicks "Join Escalation" to be added to the live call via WebRTC.
 
 ---
 
@@ -444,3 +447,4 @@ The existing three-panel dashboard evolves to accommodate new features:
 - **Document processing failure**: Failed documents show the error reason and offer a "Retry" button.
 - **Escalation when no operator is online**: If no operator is connected to the dashboard when escalation is triggered, the AI informs the caller, offers to take a message or schedule a callback, and creates a case record.
 - **Escalation during WebRTC calls**: The operator joins the WebRTC call via the same signaling infrastructure; the AI verbal handoff and disconnect behavior is identical to ACS calls.
+- **No escalation number configured**: If neither the campaign nor settings has an escalation phone number, the system cannot perform a live phone transfer. Instead, the AI informs the caller that a human will follow up, creates a case marked as "Escalation" priority, and sends a dashboard notification with a callback request.
