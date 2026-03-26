@@ -18,6 +18,7 @@
 - Q: How should the AI behave when Azure AI Search is unavailable during a live call? → A: AI falls back to general model knowledge gracefully (no source attribution), unless the campaign explicitly restricts the agent to provided data only — in that case, the AI states it cannot answer and the failure is logged.
 - Q: Where should the escalation phone number be configured? → A: Both — default escalation number in Settings, with optional per-campaign override. Fallback chain: campaign override → settings default → dashboard-notification-only (case + callback request). For internet calls, escalation sends a dashboard notification and the operator clicks "Join Escalation."
 - Q: How should internet-based callers be identified for case matching when no phone number exists? → A: Caller self-identification — the Join Call page asks for name + optional email/phone before connecting; this is used for case matching and deduplication.
+- Q: When does a case transition to "InProgress" status? → A: Automatically when a follow-up call begins on an existing open case, indicating active handling.
 
 ---
 
@@ -110,7 +111,7 @@ As a contact center system, I want an AI agent that automatically creates, updat
 **Acceptance Scenarios**:
 
 1. **Given** a call ends where the customer reported a new issue, **When** the call record is saved, **Then** the Case Management Agent automatically creates a case with: title (derived from intent), description (call summary), priority (derived from sentiment and urgency), status ("Open"), and linked call record.
-2. **Given** a customer calls back about an existing open case, **When** the system matches the caller's phone number to an existing case, **Then** the Case Management Agent updates the case with the new interaction details and appends the transcript.
+2. **Given** a customer calls back about an existing open case, **When** the system matches the caller's phone number to an existing case, **Then** the Case Management Agent transitions the case to "InProgress," updates it with the new interaction details, and appends the transcript.
 3. **Given** a call ends where the issue was resolved, **When** the AI determines the customer confirmed resolution, **Then** the Case Management Agent sets the case status to "Resolved" and adds a resolution summary.
 4. **Given** the administrator wants to review all open cases, **When** they navigate to the Cases view, **Then** they see a list of all cases with status, priority, linked calls, and time since creation.
 5. **Given** a case has been in "Resolved" status for 48 hours without re-contact, **When** the auto-close window expires, **Then** the Case Management Agent changes the status to "Closed."
@@ -183,7 +184,7 @@ As a supervisor, I want an AI agent that automatically evaluates the quality of 
 
 - **FR-016**: The system shall automatically create case records from call outcomes, including derived title, description, priority, and linked call records.
 - **FR-017**: The system shall match returning callers to existing open cases by phone number (for PSTN calls) or by self-provided email/phone (for internet-based calls). The Join Call page collects caller name and optional email/phone before connecting.
-- **FR-018**: The system shall automatically update case records when follow-up calls occur on the same issue.
+- **FR-018**: The system shall automatically update case records when follow-up calls occur on the same issue, transitioning the case status to "InProgress" when a follow-up call begins.
 - **FR-019**: The system shall automatically close cases after a configurable period in "Resolved" status without re-contact (default: 48 hours).
 - **FR-020**: The system shall provide a Cases view for operators and supervisors to manage open, resolved, and closed cases.
 
@@ -264,7 +265,7 @@ As a supervisor, I want an AI agent that automatically evaluates the quality of 
 | Id | string (GUID) | Unique identifier |
 | Title | string | Derived from intent or call summary |
 | Description | string | Case details from call transcript |
-| Status | enum | Open, InProgress, Resolved, Closed |
+| Status | enum | Open, InProgress, Resolved, Closed. Transitions: Open → InProgress (follow-up call begins), InProgress → Resolved (issue confirmed resolved), Resolved → Closed (48h auto-close) |
 | Priority | enum | Low, Medium, High, Critical |
 | CallerPhoneNumber | string | Masked phone number |
 | LinkedCallRecords | string[] | Associated call record IDs |
