@@ -7,6 +7,18 @@
 
 ---
 
+## Clarifications
+
+### Session 2026-03-27
+
+- Q: What should "escalation to a human operator" mean — live transfer, callback, dashboard join, or AI-guided? → A: Live call transfer — human operator joins the call first, AI verbally introduces the context and hands off, then AI drops off the call.
+- Q: How should case data be persisted given relational query needs (caller matching, status filtering)? → A: Azure Cosmos DB for cases and intents — structured queries with no Blob Storage index workaround needed.
+- Q: What protection should shareable WebRTC call links have against abuse? → A: Time-expiring (configurable, default 15 minutes) + single-use (invalidated after first join).
+- Q: What level of observability should the autonomous agents have? → A: Structured agent activity log + dashboard "Agent Activity" panel showing recent actions and failures.
+- Q: How should the AI behave when Azure AI Search is unavailable during a live call? → A: AI falls back to general model knowledge gracefully (no source attribution), unless the campaign explicitly restricts the agent to provided data only — in that case, the AI states it cannot answer and the failure is logged.
+
+---
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Customer Intent Agent for Self-Service (Priority: P1)
@@ -22,7 +34,7 @@ As a contact center administrator, I want an AI agent that autonomously discover
 1. **Given** the system has 10+ historical call records, **When** the administrator triggers intent discovery, **Then** the system analyzes transcripts and produces a list of discovered intents grouped into intent categories.
 2. **Given** discovered intents exist in the intent library, **When** an inbound or outbound call begins, **Then** the AI agent uses the intent library to identify the caller's likely intent within the first 30 seconds of conversation.
 3. **Given** the AI identifies a caller's intent (e.g., "billing dispute"), **When** a matching knowledge article exists, **Then** the AI uses the knowledge article to provide an accurate resolution without human intervention.
-4. **Given** the AI cannot resolve the caller's issue autonomously, **When** the confidence score falls below a configurable threshold, **Then** the system escalates to a human operator with a summary of the conversation so far, the detected intent, and suggested next steps.
+4. **Given** the AI cannot resolve the caller's issue autonomously, **When** the confidence score falls below a configurable threshold, **Then** the system transfers the live call to a human operator — the operator joins the call first, the AI verbally introduces the caller, summarizes the conversation and detected intent, then the AI disconnects from the call.
 5. **Given** intent discovery runs periodically, **When** new call records accumulate, **Then** the system discovers new intents and updates existing ones without losing previously approved intents.
 
 ---
@@ -59,7 +71,7 @@ As a contact center operator, I want the system to receive and handle inbound ph
 1. **Given** an ACS phone number is configured for inbound routing, **When** a customer calls that number, **Then** the system accepts the call and connects the AI agent within 3 seconds.
 2. **Given** an inbound call is answered by the AI agent, **When** the caller speaks, **Then** the AI agent responds using the configured default inbound campaign and references the knowledge base.
 3. **Given** an inbound call is in progress, **When** the operator views the dashboard, **Then** the call appears in the live calls panel with an "Inbound" badge, showing real-time transcript and sentiment.
-4. **Given** the AI agent cannot resolve the caller's issue, **When** escalation is triggered, **Then** the system notifies an available operator and provides the conversation context (transcript, detected intent, suggested actions).
+4. **Given** the AI agent cannot resolve the caller's issue, **When** escalation is triggered, **Then** the system adds a human operator to the live call, the AI verbally introduces the caller and summarizes the conversation (intent, key points, suggested actions), and then the AI disconnects — leaving the operator and caller on the line.
 5. **Given** no operators are available for escalation, **When** the AI cannot help further, **Then** the system offers to take a message or schedule a callback, and creates a case record.
 6. **Given** an inbound call arrives, **When** a campaign with inbound routing rules is configured, **Then** the system routes the call to the appropriate AI behavior based on the called number or IVR menu selection.
 7. **Given** multiple inbound calls arrive simultaneously, **When** the concurrent call limit is reached, **Then** additional callers hear a configurable hold message or are asked to call back.
@@ -76,9 +88,9 @@ As an operator, I want to be able to make and receive calls directly from the br
 
 **Acceptance Scenarios**:
 
-1. **Given** the operator selects "Browser (WebRTC)" calling mode in settings, **When** they initiate a call, **Then** the system generates a unique shareable link (URL) instead of dialing a phone number.
-2. **Given** a shareable call link is generated, **When** a user opens the link in any modern browser, **Then** a lightweight call page loads with a "Join Call" button that requests microphone permission.
-3. **Given** the remote user joins the call via the link, **When** both parties are connected, **Then** bidirectional audio streams through the server with the AI agent mediating the conversation (same as ACS mode).
+1. **Given** the operator selects "Browser (WebRTC)" calling mode in settings, **When** they initiate a call, **Then** the system generates a unique shareable link (URL) that expires after a configurable time window (default: 15 minutes) and is single-use.
+2. **Given** a shareable call link is generated, **When** a user opens the link in any modern browser before expiry, **Then** a lightweight call page loads with a "Join Call" button that requests microphone permission.
+3. **Given** the remote user joins the call via the link, **When** both parties are connected, **Then** the link is immediately invalidated (cannot be reused) and bidirectional audio streams through the server with the AI agent mediating the conversation (same as ACS mode).
 4. **Given** a WebRTC call is in progress, **When** the operator views the dashboard, **Then** the call appears with a "WebRTC" badge and all features work identically (transcript, sentiment, recording, history).
 5. **Given** the system is in WebRTC mode, **When** an inbound call link is shared publicly, **Then** callers can reach the AI agent by clicking the link — functioning as a lightweight inbound channel.
 6. **Given** the operator wants to switch back to ACS mode, **When** they change the calling mode in settings, **Then** subsequent calls use ACS telephony as before (no restart required).
@@ -153,14 +165,14 @@ As a supervisor, I want an AI agent that automatically evaluates the quality of 
 
 - **FR-007**: The system shall accept inbound calls on configured ACS phone numbers and route them to the AI agent.
 - **FR-008**: The system shall support configurable inbound routing rules that map phone numbers to specific campaigns or AI behaviors.
-- **FR-009**: The system shall support AI-to-operator escalation during inbound calls, including conversation context transfer.
+- **FR-009**: The system shall support AI-to-operator escalation during calls (inbound and outbound) by adding the operator to the live call, having the AI verbally introduce the context, and then removing the AI from the call.
 - **FR-010**: The system shall distinguish inbound and outbound calls visually in the dashboard and call history.
 - **FR-011**: The system shall handle concurrent inbound and outbound calls up to the configured maximum (default: 5 total).
 
 ### Browser-Based Calling (WebRTC)
 
 - **FR-012**: The system shall support an alternative WebRTC calling mode that operates without ACS.
-- **FR-013**: The system shall generate shareable call links when in WebRTC mode, allowing any browser user to join a call.
+- **FR-013**: The system shall generate shareable call links when in WebRTC mode. Links expire after a configurable time window (default: 15 minutes) and are single-use (invalidated after the first user joins).
 - **FR-014**: The system shall establish peer-to-peer audio connections through a signaling server, with the AI agent processing audio in the same pipeline as ACS calls.
 - **FR-015**: The system shall support switching between ACS and WebRTC calling modes without application restart.
 
@@ -185,6 +197,15 @@ As a supervisor, I want an AI agent that automatically evaluates the quality of 
 - **FR-026**: The system shall flag calls below a configurable quality threshold for supervisor review.
 - **FR-027**: The system shall provide a Quality Dashboard with trend analytics, average scores, and flagged call lists.
 
+### Agent Observability
+
+- **FR-028**: Each agent action (intent discovery, case creation/update, knowledge gap detection, quality evaluation) shall produce a structured log entry containing: agent name, action type, input call record ID, result (success/failure), duration, and error details if applicable.
+- **FR-029**: The system shall provide an "Agent Activity" panel in the dashboard showing the most recent agent actions, filterable by agent type, with failure highlighting.
+
+### Knowledge & Campaign Behavior
+
+- **FR-030**: Campaigns shall support a "restrict to provided data only" flag. When enabled, the AI agent must only answer from knowledge base content and shall not fall back to general model knowledge. If the knowledge base is unavailable or returns no results, the AI states it cannot answer and suggests escalation.
+
 ---
 
 ## Success Criteria *(mandatory)*
@@ -195,7 +216,7 @@ As a supervisor, I want an AI agent that automatically evaluates the quality of 
 4. **Case Auto-Creation Rate**: At least 90% of calls that involve a customer issue result in an automatically created or updated case record.
 5. **Quality Evaluation Coverage**: 100% of completed calls receive an automated quality evaluation within 60 seconds of call completion.
 6. **WebRTC Call Quality**: Browser-to-browser calls maintain conversational audio quality (no perceptible lag or dropout) for calls up to 10 minutes.
-7. **Escalation Success Rate**: When the AI escalates to a human operator, 100% of escalations include the full conversation context (transcript, intent, suggested actions).
+7. **Escalation Success Rate**: When the AI escalates to a human operator, 100% of escalations result in a live call transfer where the AI verbally summarizes the context before disconnecting.
 8. **Knowledge Gap Detection**: The system identifies at least 70% of repeated unanswered questions within the first week of operation.
 9. **Operator Efficiency**: Operators spend less than 1 minute on post-call documentation per call due to automated case management.
 10. **All Existing Features Preserved**: All current capabilities (outbound calling, campaigns, sentiment analysis, emotion analysis, call history, VoiceLive voices, settings management) continue to function without regression.
@@ -277,6 +298,8 @@ As a supervisor, I want an AI agent that automatically evaluates the quality of 
 |-------|------|-------------|
 | SessionId | string (GUID) | Unique session identifier |
 | ShareableLink | string | URL for the remote party to join |
+| ExpiresAt | DateTimeOffset | When the link becomes invalid |
+| IsUsed | bool | Whether the link has been consumed by a join |
 | Status | enum | Waiting, Connected, Disconnected |
 | CreatedAt | DateTimeOffset | Session creation time |
 | CallerConnectionId | string? | SignalR connection ID of the caller |
@@ -293,6 +316,7 @@ As a supervisor, I want an AI agent that automatically evaluates the quality of 
 - **NFR-005**: Quality evaluations shall complete within 60 seconds of call termination.
 - **NFR-006**: WebRTC audio latency shall not exceed 200 milliseconds round-trip for browser-to-server communication.
 - **NFR-007**: The system shall maintain backward compatibility with all existing features (outbound calls, campaigns, sentiment, emotion, call history, VoiceLive, settings).
+- **NFR-008**: All agent actions shall be logged with structured entries; the Agent Activity panel shall display the 50 most recent actions with sub-second rendering.
 
 ---
 
@@ -309,6 +333,7 @@ As a supervisor, I want an AI agent that automatically evaluates the quality of 
 - Knowledge Management Agent: knowledge gap detection and article suggestion
 - Quality Evaluation Agent: automated call quality scoring against configurable criteria
 - UI/UX for all new features integrated into the existing dashboard
+- Agent observability: structured activity logging and dashboard Agent Activity panel
 - Source attribution for knowledge-based AI responses
 
 ### Out of Scope
@@ -334,6 +359,7 @@ As a supervisor, I want an AI agent that automatically evaluates the quality of 
 | Azure OpenAI Service | AI agent conversation (Realtime API), sentiment, emotion, summaries, intent discovery, quality evaluation | Existing |
 | Azure AI VoiceLive | Alternative voice engine with Dragon HD voices | Existing |
 | Azure AI Search | Knowledge base indexing and hybrid retrieval | New — must be provisioned |
+| Azure Cosmos DB (NoSQL API) | Structured persistence for cases, intents, quality evaluations, and knowledge gap records | New — must be provisioned |
 | Azure Blob Storage | Document storage, call recordings, case records, knowledge articles | Existing |
 | Azure AI Document Intelligence (optional) | Enhanced PDF/DOCX text extraction for complex layouts | New — optional, can fallback to built-in extraction |
 | SignalR | Real-time transcript, sentiment, call status, WebRTC signaling | Existing |
@@ -343,11 +369,12 @@ As a supervisor, I want an AI agent that automatically evaluates the quality of 
 ## Assumptions *(mandatory)*
 
 1. **Azure AI Search** will be provisioned in the same region as the existing resources (Southeast Asia or compatible) with a Basic or Standard tier that supports vector search.
+1b. **Azure Cosmos DB** will be provisioned in the same region with serverless or autoscale capacity mode to minimize cost at POC scale.
 2. **Document extraction** for simple PDF/DOCX files will use standard text extraction. Azure AI Document Intelligence is used only for complex layouts with tables, images, or scanned content.
 3. **Embeddings** will be generated using Azure OpenAI's `text-embedding-3-small` or equivalent deployed model.
 4. **Intent discovery** runs as a batch process (on-demand or scheduled daily), not in real-time during calls. Real-time intent detection during calls uses the pre-built intent library.
 5. **WebRTC signaling** will be handled through the existing SignalR infrastructure (no separate TURN/STUN servers for POC — uses public STUN servers like Google's for NAT traversal).
-6. **Case persistence** will use the same Blob Storage pattern as existing call history (JSON files per case).
+6. **Case and intent persistence** will use Azure Cosmos DB (NoSQL API) for structured querying (status, priority, phone number matching, intent lookups). Call recordings and documents remain in Blob Storage.
 7. **Quality evaluation criteria** are configured by the administrator through a settings interface, with a set of default criteria provided out of the box.
 8. **Inbound call routing** in ACS will use Event Grid webhook notifications to the existing callback controller pattern.
 9. **The existing 5-call concurrent limit** applies to the total of inbound + outbound + WebRTC calls combined.
@@ -371,6 +398,7 @@ The existing three-panel dashboard evolves to accommodate new features:
 2. **Intent Library** (new page or settings section): Discovered intents in a table with status, frequency, linked articles. Approve/discard actions.
 3. **Cases View** (integrated in right panel tab): Case list with status badges (Open/Resolved/Closed), priority indicators, linked calls expandable.
 4. **Quality Dashboard** (integrated in right panel tab or separate page): Score trend chart, flagged calls queue, criteria configuration.
+5. **Agent Activity** (integrated in right panel tab): Chronological list of recent agent actions (e.g., "Case Management Agent created case #12 from call #45"), with red highlighting for failures and filter by agent type.
 
 ### WebRTC UX Flow
 
@@ -394,11 +422,15 @@ The existing three-panel dashboard evolves to accommodate new features:
 
 - **Large document upload**: Documents exceeding 50 MB are rejected with a clear error message before upload begins.
 - **Unsupported file format**: Only PDF, DOCX, and TXT are accepted; other formats show a validation error.
-- **Knowledge base search returns no results**: The AI falls back to its general knowledge and indicates it couldn't find specific documentation.
+- **Knowledge base search returns no results**: The AI falls back to its general knowledge and indicates it couldn't find specific documentation — unless the campaign is configured with a "restrict to provided data only" flag, in which case the AI states it cannot answer that question and suggests escalation.
+- **Azure AI Search unavailable during call**: If the search service is temporarily unreachable, the AI continues using general knowledge (for unrestricted campaigns) or declines to answer (for data-restricted campaigns). The failure is logged in the agent activity log.
 - **Concurrent inbound + outbound at limit**: When 5 calls are active, additional inbound callers hear a configurable "all agents busy" message.
 - **WebRTC browser compatibility**: If the browser doesn't support WebRTC (getUserMedia), the join page shows a compatibility error with supported browser suggestions.
 - **Caller hangs up during intent identification**: The system saves the partial transcript and any partially detected intent for future analysis.
 - **Case deduplication**: If the same caller calls about the same intent within 24 hours, the system updates the existing case rather than creating a new one.
 - **Quality evaluation of very short calls** (under 10 seconds): Calls shorter than 10 seconds are marked as "Too Short for Evaluation" and not scored.
 - **WebRTC NAT traversal failure**: If peer connection cannot be established, the system shows a "Connection failed — try a different network" message.
+- **Expired or used WebRTC link**: If a user opens an expired or already-used call link, the join page shows "This link has expired or has already been used" with no option to join.
 - **Document processing failure**: Failed documents show the error reason and offer a "Retry" button.
+- **Escalation when no operator is online**: If no operator is connected to the dashboard when escalation is triggered, the AI informs the caller, offers to take a message or schedule a callback, and creates a case record.
+- **Escalation during WebRTC calls**: The operator joins the WebRTC call via the same signaling infrastructure; the AI verbal handoff and disconnect behavior is identical to ACS calls.
