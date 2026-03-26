@@ -84,16 +84,16 @@ As an operator, I want to be able to make and receive calls directly from the br
 
 **Why this priority**: ACS has per-minute telephony costs and requires PSTN number provisioning. A WebRTC option enables free browser-to-browser calls for testing, internal demos, and scenarios where real phone numbers aren't needed.
 
-**Independent Test**: Toggle the calling mode to "Browser (WebRTC)" in settings, click "Make a Call," verify a shareable call link is generated, open the link in another browser tab, verify bidirectional voice works with the AI agent in the middle.
+**Independent Test**: Enable "Call over Internet" in settings, verify the phone number fields disappear and a "Generate Call Link" button appears. Click it, verify a shareable link is generated, open the link in another browser tab, verify bidirectional voice works with the AI agent in the middle.
 
 **Acceptance Scenarios**:
 
-1. **Given** the operator selects "Browser (WebRTC)" calling mode in settings, **When** they initiate a call, **Then** the system generates a unique shareable link (URL) that expires after a configurable time window (default: 15 minutes) and is single-use.
+1. **Given** the operator enables "Call over Internet" in settings, **When** they return to the call panel, **Then** the phone number input fields are hidden and replaced with a "Generate Call Link" button.
 2. **Given** a shareable call link is generated, **When** a user opens the link in any modern browser before expiry, **Then** a lightweight call page loads with a "Join Call" button that requests microphone permission.
-3. **Given** the remote user joins the call via the link, **When** both parties are connected, **Then** the link is immediately invalidated (cannot be reused) and bidirectional audio streams through the server with the AI agent mediating the conversation (same as ACS mode).
-4. **Given** a WebRTC call is in progress, **When** the operator views the dashboard, **Then** the call appears with a "WebRTC" badge and all features work identically (transcript, sentiment, recording, history).
-5. **Given** the system is in WebRTC mode, **When** an inbound call link is shared publicly, **Then** callers can reach the AI agent by clicking the link — functioning as a lightweight inbound channel.
-6. **Given** the operator wants to switch back to ACS mode, **When** they change the calling mode in settings, **Then** subsequent calls use ACS telephony as before (no restart required).
+3. **Given** the remote user joins the call via the link, **When** both parties are connected, **Then** the link is immediately invalidated (cannot be reused) and bidirectional audio streams through the server with the AI agent mediating the conversation (same as phone call mode).
+4. **Given** an internet call is in progress, **When** the operator views the dashboard, **Then** the call appears with an "Internet" badge and all features work identically (transcript, sentiment, recording, history).
+5. **Given** "Call over Internet" is enabled, **When** a call link is shared publicly, **Then** callers can reach the AI agent by clicking the link — functioning as a lightweight inbound channel.
+6. **Given** the operator disables "Call over Internet" in settings, **When** they return to the call panel, **Then** the phone number input fields reappear and subsequent calls use phone network as before (no restart required).
 
 ---
 
@@ -171,10 +171,10 @@ As a supervisor, I want an AI agent that automatically evaluates the quality of 
 
 ### Browser-Based Calling (WebRTC)
 
-- **FR-012**: The system shall support an alternative WebRTC calling mode that operates without ACS.
+- **FR-012**: The system shall support an alternative internet-based calling mode (WebRTC) that operates without phone network connectivity, activated via a "Call over Internet" checkbox in settings.
 - **FR-013**: The system shall generate shareable call links when in WebRTC mode. Links expire after a configurable time window (default: 15 minutes) and are single-use (invalidated after the first user joins).
 - **FR-014**: The system shall establish peer-to-peer audio connections through a signaling server, with the AI agent processing audio in the same pipeline as ACS calls.
-- **FR-015**: The system shall support switching between ACS and WebRTC calling modes without application restart.
+- **FR-015**: The system shall support switching between phone and internet calling modes without application restart. When "Call over Internet" is enabled, phone number input fields are hidden and replaced with link generation controls.
 
 ### Case Management
 
@@ -384,37 +384,47 @@ As a supervisor, I want an AI agent that automatically evaluates the quality of 
 
 ## UX/UI Design Direction
 
+> **UX Review Note (2026-03-27)**: The current dashboard is a 3-panel layout (left 22% / center flex / right 22%) with deep navy sidebars. The left panel handles campaign selection + phone input + call initiation. The center panel shows live call transcript/sentiment or call history detail. The right panel has 2 tabs: "Live calls" and "Historical calls". The settings overlay is a centered modal. The following design integrates new features while respecting the existing layout's constraints — particularly the right panel width (22%) which limits how much tab content can fit.
+
 ### Dashboard Evolution
 
 The existing three-panel dashboard evolves to accommodate new features:
 
-- **Left Panel**: Adds a "Call Mode" toggle at the top (ACS / WebRTC), and an "Inbound" section showing the configured inbound number and status. Campaign selector remains below.
-- **Center Panel**: Gains an "Inbound" badge on inbound calls. When a WebRTC call generates a shareable link, a copyable link card appears. Knowledge source attribution appears inline in transcripts.
-- **Right Panel**: Adds tabs for "Cases" and "Quality" alongside existing "Live" and "History" tabs.
+- **Left Panel**: Campaign selector remains at the top. Below it, an "Inbound" status indicator shows the configured inbound number and whether it's active (green dot) or inactive (gray dot). The phone number input section is **conditionally shown** — when "Call over Internet" is enabled in settings, the two phone number fields and contact name inputs are replaced with a "Generate Call Link" button and the resulting copyable link card + QR code.
+- **Center Panel**: Gains an "Inbound" badge on inbound calls and an "Internet" badge on internet-based calls (replacing the phone number in the call status bar). Knowledge source attribution appears inline in transcript chat bubbles as a small document icon tooltip with the source name. The center panel also hosts the **Knowledge Base Manager**, **Intent Library**, **Quality Dashboard**, and **Agent Activity** views — accessible via a top navigation bar or header links (not crammed into the right panel tabs, which are too narrow for these data-dense views).
+- **Right Panel**: Keeps the existing 2 tabs ("Live" and "History") plus adds one new tab: **"Cases"**. Cases are a compact list view (status badge, title, priority dot) that fits the narrow panel. Agent Activity and Quality Dashboard are too data-dense for the 22%-width right panel and are shown in the center panel instead.
 
-### New Pages/Sections
+### New Views (Center Panel)
 
-1. **Knowledge Base Manager** (new page or modal): Upload area (drag-and-drop), document list with processing status, search preview to test queries.
-2. **Intent Library** (new page or settings section): Discovered intents in a table with status, frequency, linked articles. Approve/discard actions.
-3. **Cases View** (integrated in right panel tab): Case list with status badges (Open/Resolved/Closed), priority indicators, linked calls expandable.
-4. **Quality Dashboard** (integrated in right panel tab or separate page): Score trend chart, flagged calls queue, criteria configuration.
-5. **Agent Activity** (integrated in right panel tab): Chronological list of recent agent actions (e.g., "Case Management Agent created case #12 from call #45"), with red highlighting for failures and filter by agent type.
+1. **Knowledge Base Manager** (center panel view, accessible from header nav or settings link): Drag-and-drop upload area at top, document list below with processing status indicators (spinner for Processing, checkmark for Indexed, red X for Failed), search preview panel at bottom to test queries against indexed content.
+2. **Intent Library** (center panel view, accessible from header nav): Table of discovered intents with columns: Name, Category, Frequency, Status (Pending/Approved/Discarded), Linked Articles. Bulk approve/discard actions. Search/filter bar.
+3. **Quality Dashboard** (center panel view, accessible from header nav): Score trend line chart (7/30/90 day views), average score display, flagged calls queue with severity sort, criteria configuration section below.
+4. **Agent Activity** (center panel view, accessible from header nav): Chronological feed of recent agent actions (e.g., "Case Management Agent created case #12 from call #45"). Red highlighting for failures. Filter by agent type dropdown at top.
 
-### WebRTC UX Flow
+### Right Panel Addition
 
-1. Operator selects "Browser (WebRTC)" mode in the call mode toggle.
-2. Phone number fields are replaced with a "Generate Call Link" button.
-3. Clicking generates a unique URL displayed in a copyable card with a QR code.
-4. The operator shares the link via any channel (email, chat, SMS).
-5. When the remote user joins, the dashboard behaves identically to an ACS call.
-6. A lightweight "Join Call" page loads for the remote user — minimal UI with just a "Join" button, microphone permission prompt, and a simple transcript view.
+5. **Cases Tab** (right panel, 3rd tab alongside Live and History): Compact case list sorted by last update. Each case row shows: status dot (color-coded: blue=Open, orange=InProgress, green=Resolved, gray=Closed), truncated title, priority indicator (Low/Med/High/Crit). Clicking a case opens the full case detail in the center panel (same pattern as clicking a history item).
+
+### Internet Calling UX Flow
+
+1. Operator enables "Call over Internet" checkbox in Settings.
+2. On the call panel (left panel), the phone number input fields disappear. A "Generate Call Link" button appears instead.
+3. Clicking it generates a unique URL (expires in 15 min, single-use) displayed in a copyable card with a QR code.
+4. The operator shares the link via any external channel (email, chat, SMS — the system doesn't send it).
+5. When the remote user joins, the dashboard behaves identically to a phone call — same transcript panel, sentiment indicators, recording controls.
+6. A lightweight **"Join Call" page** loads for the remote user — minimal branded UI with:
+   - "Join Call" button (prominent, center screen)
+   - Microphone permission prompt on click
+   - Simple real-time transcript view (read-only) once connected
+   - No login required
 
 ### Settings Additions
 
-- **Call Mode**: Toggle between "ACS (Telephony)" and "Browser (WebRTC)" — with visual indicator of current mode.
-- **Inbound Configuration**: Show configured inbound number, default inbound campaign selector.
-- **Quality Criteria**: List of evaluation criteria with name, description, weight, and minimum threshold.
-- **Knowledge Base**: Quick link to knowledge base manager from settings.
+- **Call over Internet** (checkbox): "Enable internet-based calling instead of phone network. When enabled, calls are made via shareable links instead of phone numbers." Visual indicator showing current mode (phone icon or globe icon in the header bar).
+- **Inbound Configuration**: Configured inbound phone number (read-only display), default inbound campaign selector dropdown.
+- **Quality Criteria**: Editable list of evaluation criteria — each with: name, description, weight (1-10), minimum passing score (1-5). Add/remove/reorder.
+- **Campaign Data Restriction**: Per-campaign checkbox: "Restrict AI to provided data only" — prevents the AI from using general knowledge, only knowledge base content.
+- **Knowledge Base**: Quick-access link to Knowledge Base Manager.
 
 ---
 
