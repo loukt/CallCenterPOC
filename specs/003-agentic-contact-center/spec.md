@@ -17,6 +17,7 @@
 - Q: What level of observability should the autonomous agents have? → A: Structured agent activity log + dashboard "Agent Activity" panel showing recent actions and failures.
 - Q: How should the AI behave when Azure AI Search is unavailable during a live call? → A: AI falls back to general model knowledge gracefully (no source attribution), unless the campaign explicitly restricts the agent to provided data only — in that case, the AI states it cannot answer and the failure is logged.
 - Q: Where should the escalation phone number be configured? → A: Both — default escalation number in Settings, with optional per-campaign override. Fallback chain: campaign override → settings default → dashboard-notification-only (case + callback request). For internet calls, escalation sends a dashboard notification and the operator clicks "Join Escalation."
+- Q: How should internet-based callers be identified for case matching when no phone number exists? → A: Caller self-identification — the Join Call page asks for name + optional email/phone before connecting; this is used for case matching and deduplication.
 
 ---
 
@@ -181,7 +182,7 @@ As a supervisor, I want an AI agent that automatically evaluates the quality of 
 ### Case Management
 
 - **FR-016**: The system shall automatically create case records from call outcomes, including derived title, description, priority, and linked call records.
-- **FR-017**: The system shall match returning callers to existing open cases by phone number or caller identification.
+- **FR-017**: The system shall match returning callers to existing open cases by phone number (for PSTN calls) or by self-provided email/phone (for internet-based calls). The Join Call page collects caller name and optional email/phone before connecting.
 - **FR-018**: The system shall automatically update case records when follow-up calls occur on the same issue.
 - **FR-019**: The system shall automatically close cases after a configurable period in "Resolved" status without re-contact (default: 48 hours).
 - **FR-020**: The system shall provide a Cases view for operators and supervisors to manage open, resolved, and closed cases.
@@ -304,6 +305,9 @@ As a supervisor, I want an AI agent that automatically evaluates the quality of 
 | IsUsed | bool | Whether the link has been consumed by a join |
 | Status | enum | Waiting, Connected, Disconnected |
 | CreatedAt | DateTimeOffset | Session creation time |
+| CallerName | string? | Self-provided caller name from Join Call page |
+| CallerEmail | string? | Self-provided email (optional, for case matching) |
+| CallerPhone | string? | Self-provided phone (optional, for case matching) |
 | CallerConnectionId | string? | SignalR connection ID of the caller |
 | OperatorConnectionId | string | SignalR connection ID of the operator |
 
@@ -415,7 +419,8 @@ The existing three-panel dashboard evolves to accommodate new features:
 4. The operator shares the link via any external channel (email, chat, SMS — the system doesn't send it).
 5. When the remote user joins, the dashboard behaves identically to a phone call — same transcript panel, sentiment indicators, recording controls.
 6. A lightweight **"Join Call" page** loads for the remote user — minimal branded UI with:
-   - "Join Call" button (prominent, center screen)
+   - Caller identification form: name (required) + email or phone (optional, used for case matching)
+   - "Join Call" button (prominent, below the form)
    - Microphone permission prompt on click
    - Simple real-time transcript view (read-only) once connected
    - No login required
