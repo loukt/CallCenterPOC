@@ -111,6 +111,7 @@ jobs:
       url: https://contactcenterpoc-api.azurewebsites.net
     env:
       API_APP_SETTINGS_AVAILABLE: ${{ secrets.AZURE_API_APPSETTINGS_JSON != '' }}
+      API_PUBLISH_PROFILE_AVAILABLE: ${{ secrets.AZURE_API_PUBLISH_PROFILE != '' }}
       AZURE_LOGIN_USE_OIDC: ${{ vars.AZURE_CLIENT_ID != '' && vars.AZURE_TENANT_ID != '' && vars.AZURE_SUBSCRIPTION_ID != '' }}
       AZURE_LOGIN_USE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS != '' }}
     steps:
@@ -122,26 +123,34 @@ jobs:
           name: api-package
           path: ./api-publish
 
-      - name: Deploy to Azure App Service (API)
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: ${{ env.API_APP_NAME }}
-          publish-profile: ${{ secrets.AZURE_API_PUBLISH_PROFILE }}
-          package: ./api-publish
-
-      - name: Azure login for API settings (OIDC)
-        if: env.AZURE_LOGIN_USE_OIDC == 'true' && env.API_APP_SETTINGS_AVAILABLE == 'true'
+      - name: Azure login for API deploy and settings (OIDC)
+        if: env.AZURE_LOGIN_USE_OIDC == 'true'
         uses: azure/login@v2
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Azure login for API settings (legacy secret)
-        if: env.AZURE_LOGIN_USE_OIDC != 'true' && env.AZURE_LOGIN_USE_CREDENTIALS == 'true' && env.API_APP_SETTINGS_AVAILABLE == 'true'
+      - name: Azure login for API deploy and settings (legacy secret)
+        if: env.AZURE_LOGIN_USE_OIDC != 'true' && env.AZURE_LOGIN_USE_CREDENTIALS == 'true'
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure App Service (API) with Azure login
+        if: env.AZURE_LOGIN_USE_OIDC == 'true' || env.AZURE_LOGIN_USE_CREDENTIALS == 'true'
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.API_APP_NAME }}
+          package: ./api-publish
+
+      - name: Deploy to Azure App Service (API) with publish profile fallback
+        if: env.AZURE_LOGIN_USE_OIDC != 'true' && env.AZURE_LOGIN_USE_CREDENTIALS != 'true' && env.API_PUBLISH_PROFILE_AVAILABLE == 'true'
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.API_APP_NAME }}
+          publish-profile: ${{ secrets.AZURE_API_PUBLISH_PROFILE }}
+          package: ./api-publish
 
       - name: Write API App Settings file
         if: env.API_APP_SETTINGS_AVAILABLE == 'true' && (env.AZURE_LOGIN_USE_OIDC == 'true' || env.AZURE_LOGIN_USE_CREDENTIALS == 'true')
@@ -166,9 +175,16 @@ jobs:
     name: Deploy APP
     runs-on: ubuntu-latest
     needs: [build-app, test]
+    permissions:
+      contents: read
+      id-token: write
     environment:
       name: production
       url: https://contactcenterpoc-app.azurewebsites.net
+    env:
+      APP_PUBLISH_PROFILE_AVAILABLE: ${{ secrets.AZURE_APP_PUBLISH_PROFILE != '' }}
+      AZURE_LOGIN_USE_OIDC: ${{ vars.AZURE_CLIENT_ID != '' && vars.AZURE_TENANT_ID != '' && vars.AZURE_SUBSCRIPTION_ID != '' }}
+      AZURE_LOGIN_USE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -178,7 +194,29 @@ jobs:
           name: app-package
           path: ./app-publish
 
-      - name: Deploy to Azure App Service (APP)
+      - name: Azure login for APP deploy (OIDC)
+        if: env.AZURE_LOGIN_USE_OIDC == 'true'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Azure login for APP deploy (legacy secret)
+        if: env.AZURE_LOGIN_USE_OIDC != 'true' && env.AZURE_LOGIN_USE_CREDENTIALS == 'true'
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure App Service (APP) with Azure login
+        if: env.AZURE_LOGIN_USE_OIDC == 'true' || env.AZURE_LOGIN_USE_CREDENTIALS == 'true'
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.APP_APP_NAME }}
+          package: ./app-publish
+
+      - name: Deploy to Azure App Service (APP) with publish profile fallback
+        if: env.AZURE_LOGIN_USE_OIDC != 'true' && env.AZURE_LOGIN_USE_CREDENTIALS != 'true' && env.APP_PUBLISH_PROFILE_AVAILABLE == 'true'
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.APP_APP_NAME }}
