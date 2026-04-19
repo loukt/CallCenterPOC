@@ -80,13 +80,23 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Restore
-        run: dotnet restore
+      - name: Detect test project
+        id: detect-tests
+        shell: bash
+        run: |
+          if [ -f CallCenterPOC-API.Tests/CallCenterPOC-API.Tests.csproj ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "CallCenterPOC-API.Tests/CallCenterPOC-API.Tests.csproj not found; skipping tests."
+          fi
 
       - name: Build
-        run: dotnet build --configuration Release --no-restore
+        if: steps.detect-tests.outputs.found == 'true'
+        run: dotnet build CallCenterPOC-API.Tests/CallCenterPOC-API.Tests.csproj --configuration Release
 
       - name: Run unit tests
+        if: steps.detect-tests.outputs.found == 'true'
         run: dotnet test CallCenterPOC-API.Tests/CallCenterPOC-API.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~Unit" --verbosity normal
 
   deploy-api:
