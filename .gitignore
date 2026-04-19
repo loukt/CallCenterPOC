@@ -368,18 +368,23 @@ FodyWeavers.xsd
 # Debug and diagnostic artifacts (root-level)
 /aoai-*.txt
 /aoai-*.json
+/app-*.txt
 /az-*.txt
 /az-*.json
 /api-*.txt
 /api-*.json
 /api-*.log
 /app-*.log
+/batch-*.txt
 /callhistory-*.txt
 /callhistory-*.json
 /deploy-*.txt
 /pe-*.json
 /pe-*.txt
+/storage-network-check.txt
+/test-results-*.txt
 /update-*.json
+/verify-*.txt
 /zg-*.txt
 /zonegroup-*.txt
 /zonegroup-*.json
@@ -392,11 +397,22 @@ FodyWeavers.xsd
 /aoai-sentiment-resp.json
 /aoai-resource.json
 /api-appsettings.json
+/prod-settings.json
+
+# Local and secret-bearing config files
+**/appsettings.Local.json
+**/appsettings.*.local.json
+**/appsettings.Secrets.json
+**/appsettings.*.Secrets.json
+*.secrets.json
+*.secret.json
 
 # Downloaded log bundles and log directories
+api-crash-logs/
 api-logs/
 api-logs-latest/
 api-logs-latest2/
+api-logs-now/
 api-logs-unzipped/
 api-logs-download.zip
 appservice-logs-*.zip

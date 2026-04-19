@@ -129,6 +129,82 @@ You need the following deployments in your Azure OpenAI resource:
 
 > **Note:** In production on Azure App Service, configure these as **Application Settings** (environment variables) rather than editing `appsettings.json`. Use colon-separated keys (e.g., `AzureCommunicationServices:ConnectionString`) or double-underscore format (`AzureCommunicationServices__ConnectionString`).
 
+### Recommended Secret Management Pattern
+
+Commit only non-secret templates and defaults:
+
+- Keep safe defaults and structural keys in `ContactCenter-API/appsettings.json`.
+- Commit `prod-settings.example.json` as the deployment shape for Azure App Service.
+- Do **not** commit `prod-settings.json`, local override files, API keys, connection strings, or deployment-specific URLs.
+
+Use different sources for real values:
+
+- Local development: `dotnet user-secrets` for API secrets.
+- Azure App Service: App Settings or Key Vault references.
+- CI/CD: pipeline secrets or environment variables.
+
+Recommended local setup for the API:
+
+```sh
+cd ContactCenter-API
+dotnet user-secrets init
+dotnet user-secrets set "AzureCommunicationServices:ConnectionString" "<your-acs-connection-string>"
+dotnet user-secrets set "AzureCommunicationServices:PhoneNumber" "+14255550123"
+dotnet user-secrets set "AzureOpenAI:EndpointUri" "https://<your-openai-resource>.cognitiveservices.azure.com/"
+dotnet user-secrets set "AzureOpenAI:Key" "<your-openai-key>"
+dotnet user-secrets set "VoiceLive:Key" "<optional-voicelive-key>"
+dotnet user-secrets set "BlobStorage:ConnectionString" "<local-storage-connection-string>"
+```
+
+Recommended production setup:
+
+- Copy `prod-settings.example.json` to a local, untracked `prod-settings.json`.
+- Replace placeholder values with the target environment's own resources.
+- Apply those settings during deployment, not from source control.
+- Prefer managed identity and resource URIs over raw secrets where supported.
+- Prefer Azure Key Vault references for secrets that must stay in App Settings.
+
+To push a local settings file into Azure App Service without committing it:
+
+```powershell
+./scripts/Set-AppServiceSettings.ps1 -ResourceGroup ContactCenterPOC -AppName contactcenterpoc-api -SettingsFile ./prod-settings.json
+```
+
+For a deployment slot:
+
+```powershell
+./scripts/Set-AppServiceSettings.ps1 -ResourceGroup ContactCenterPOC -AppName contactcenterpoc-api -Slot dev -SettingsFile ./prod-settings.json
+```
+
+The script prints only setting names, not values, and passes the values directly to `az webapp config appsettings set` with output suppressed.
+
+To use the same flow in GitHub Actions, add these repository secrets:
+
+- `AZURE_CREDENTIALS`: Azure login JSON for a service principal with permission to update the target App Service.
+- `AZURE_API_APPSETTINGS_JSON`: the full JSON array payload for the API app settings, using the same shape as `prod-settings.example.json`.
+
+The checked-in workflow at `.github/workflows/deploy.yml` will deploy the API package normally, then apply API App Settings from `AZURE_API_APPSETTINGS_JSON` when both secrets are present. If those secrets are not configured, the package still deploys and the settings-apply step is skipped.
+
+What another developer needs to deploy their own copy:
+
+1. Provision their own Azure resources.
+2. Fill in their own local `prod-settings.json` from `prod-settings.example.json`.
+3. Set their own local user secrets for development.
+4. Push their own App Settings or Key Vault references during deployment.
+
+This keeps the repository portable while letting every developer deploy an isolated environment.
+
+### Key Vault and Managed Identity
+
+For production, prefer these patterns where possible:
+
+- `BlobStorage:AccountUri` instead of a storage connection string.
+- `CosmosDb:Endpoint` with managed identity and RBAC instead of account keys.
+- `AzureAISearch:Endpoint` with managed identity and RBAC where supported.
+- Key Vault references in App Service for values that still require secret material.
+
+Because `prod-settings.json` has already existed with real values, treat those values as compromised: remove the tracked file, replace it with the example file, and rotate any exposed credentials.
+
 ### Frontend Configuration (`ContactCenter-APP/appsettings.json`)
 
 ```jsonc
@@ -145,9 +221,9 @@ You need the following deployments in your Azure OpenAI resource:
    cd CallCenterPOC
    ```
 
-2. **Configure the API** — Update `ContactCenter-API/appsettings.json` with your Azure resource connection strings (see [Configuration](#configuration) above).
+2. **Configure the API** — Keep `ContactCenter-API/appsettings.json` generic and store your real local secrets with `dotnet user-secrets` (see [Recommended Secret Management Pattern](#recommended-secret-management-pattern)).
 
-3. **Configure the Frontend** — Set `ApiBaseUrl` in `ContactCenter-APP/appsettings.json` to `http://localhost:5001`.
+3. **Configure the Frontend** — Set `ApiBaseUrl` in `ContactCenter-APP/appsettings.json` to `http://localhost:5001` for local development.
 
 4. **Run the API:**
    ```sh

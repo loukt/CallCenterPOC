@@ -1,0 +1,147 @@
+[
+  {
+    "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+    "slotSetting": false,
+    "value": "<app-insights-connection-string>"
+  },
+  {
+    "name": "ApplicationInsightsAgent_EXTENSION_VERSION",
+    "slotSetting": false,
+    "value": "~3"
+  },
+  {
+    "name": "XDT_MicrosoftApplicationInsights_Mode",
+    "slotSetting": false,
+    "value": "Recommended"
+  },
+  {
+    "name": "WEBSITE_HTTPLOGGING_RETENTION_DAYS",
+    "slotSetting": false,
+    "value": "3"
+  },
+  {
+    "name": "AzureCommunicationServices__ConnectionString",
+    "slotSetting": false,
+    "value": "<acs-connection-string>"
+  },
+  {
+    "name": "AzureCommunicationServices__PhoneNumber",
+    "slotSetting": false,
+    "value": "<e164-phone-number>"
+  },
+  {
+    "name": "AzureOpenAI__EndpointUri",
+    "slotSetting": false,
+    "value": "https://<your-openai-resource>.cognitiveservices.azure.com/"
+  },
+  {
+    "name": "AzureOpenAI__DeploymentName",
+    "slotSetting": false,
+    "value": "gpt-realtime-mini"
+  },
+  {
+    "name": "AzureOpenAI__ChatDeployment",
+    "slotSetting": false,
+    "value": "gpt-4o-mini"
+  },
+  {
+    "name": "AzureOpenAI__EmbeddingDeployment",
+    "slotSetting": false,
+    "value": "text-embedding-3-small"
+  },
+  {
+    "name": "AzureOpenAI__Version",
+    "slotSetting": false,
+    "value": "2024-10-01-preview"
+  },
+  {
+    "name": "AzureOpenAI__Key",
+    "slotSetting": false,
+    "value": "<optional-local-api-key-or-empty-when-using-managed-identity>"
+  },
+  {
+    "name": "AzureOpenAI__TranscriptionDeployment",
+    "slotSetting": false,
+    "value": "gpt-4o-mini-transcribe"
+  },
+  {
+    "name": "AzureOpenAI__SentimentDeployment",
+    "slotSetting": false,
+    "value": "gpt-4o-mini"
+  },
+  {
+    "name": "CallbackUrl",
+    "slotSetting": false,
+    "value": "https://<your-api-app>.azurewebsites.net/api/Callback"
+  },
+  {
+    "name": "FrontendOrigin",
+    "slotSetting": false,
+    "value": "https://<your-frontend-app>.azurewebsites.net"
+  },
+  {
+    "name": "BlobContainer",
+    "slotSetting": false,
+    "value": "https://<your-storage-account>.blob.core.windows.net/<your-container>"
+  },
+  {
+    "name": "BlobStorage__AccountUri",
+    "slotSetting": false,
+    "value": "https://<your-storage-account>.blob.core.windows.net"
+  },
+  {
+    "name": "BlobStorage__ContainerName",
+    "slotSetting": false,
+    "value": "callcenter-data"
+  },
+  {
+    "name": "CosmosDb__Endpoint",
+    "slotSetting": false,
+    "value": "https://<your-cosmos-account>.documents.azure.com:443/"
+  },
+  {
+    "name": "CosmosDb__DatabaseId",
+    "slotSetting": false,
+    "value": "CallCenterPOC"
+  },
+  {
+    "name": "AzureAISearch__Endpoint",
+    "slotSetting": false,
+    "value": "https://<your-search-service>.search.windows.net"
+  },
+  {
+    "name": "AzureAISearch__IndexName",
+    "slotSetting": false,
+    "value": "knowledge-base-index"
+  },
+  {
+    "name": "VoiceLive__EndpointUri",
+    "slotSetting": false,
+    "value": "https://<your-voicelive-resource>.cognitiveservices.azure.com/"
+  },
+  {
+    "name": "VoiceLive__Key",
+    "slotSetting": false,
+    "value": "<optional-voicelive-key-or-empty>"
+  },
+  {
+    "name": "WEBSITE_VNET_ROUTE_ALL",
+    "slotSetting": false,
+    "value": "1"
+  },
+  {
+    "name": "WEBSITE_DNS_SERVER",
+    "slotSetting": false,
+    "value": "168.63.129.16"
+  },
+  {
+    "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
+    "slotSetting": false,
+    "value": "false"
+  },
+  {
+    "name": "WEBSITE_RUN_FROM_PACKAGE",
+    "slotSetting": false,
+    "value": "1"
+  }
+]
