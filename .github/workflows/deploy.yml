@@ -5,6 +5,7 @@ on:
     branches:
       - 001-outbound-callcenter-poc
       - 002-voicelive-integration
+      - 003-agentic-contact-center
   workflow_dispatch:
 
 env:
