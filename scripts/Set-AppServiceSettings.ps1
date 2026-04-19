@@ -40,20 +40,20 @@ if ($settingsList.Count -eq 0) {
     throw "Settings file '$SettingsFile' does not contain any settings."
 }
 
-$invalid = $settingsList | Where-Object {
+$invalid = @($settingsList | Where-Object {
     [string]::IsNullOrWhiteSpace($_.name) -or $null -eq $_.value
-}
+})
 
 if ($invalid.Count -gt 0) {
     throw "Every setting entry must contain non-empty 'name' and 'value' properties."
 }
 
 $placeholderPattern = '^<.+>$'
-$placeholderNames = $settingsList |
+$placeholderNames = @($settingsList |
     Where-Object {
         $_.value -is [string] -and $_.value -match $placeholderPattern
     } |
-    Select-Object -ExpandProperty name
+    Select-Object -ExpandProperty name)
 
 if ($placeholderNames.Count -gt 0) {
     Write-Warning "The settings file still contains placeholder values for: $($placeholderNames -join ', ')"
