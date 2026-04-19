@@ -178,19 +178,26 @@ For a deployment slot:
 
 The script prints only setting names, not values, and passes the values directly to `az webapp config appsettings set` with output suppressed.
 
-To use the same flow in GitHub Actions, add these repository secrets:
+To use the same flow in GitHub Actions, configure these GitHub repository values:
 
-- `AZURE_CREDENTIALS`: Azure login JSON for a service principal with permission to update the target App Service.
-- `AZURE_API_APPSETTINGS_JSON`: the full JSON array payload for the API app settings, using the same shape as `prod-settings.example.json`.
+- Repository variable `AZURE_CLIENT_ID`: the app registration client ID for GitHub OIDC login.
+- Repository variable `AZURE_TENANT_ID`: the Microsoft Entra tenant ID.
+- Repository variable `AZURE_SUBSCRIPTION_ID`: the Azure subscription ID.
+- Repository secret `AZURE_API_APPSETTINGS_JSON`: the full JSON array payload for the API app settings, using the same shape as `prod-settings.example.json`.
 
-The checked-in workflow at `.github/workflows/deploy.yml` will deploy the API package normally, then apply API App Settings from `AZURE_API_APPSETTINGS_JSON` when both secrets are present. If those secrets are not configured, the package still deploys and the settings-apply step is skipped.
+Legacy fallback:
+
+- Repository secret `AZURE_CREDENTIALS`: Azure login JSON for a service principal with permission to update the target App Service.
+
+The checked-in workflow at `.github/workflows/deploy.yml` deploys the API package normally, then applies API App Settings from `AZURE_API_APPSETTINGS_JSON` when login details are available. It prefers GitHub OIDC using `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID`, and falls back to `AZURE_CREDENTIALS` only when those variables are not configured. If neither auth path is configured, the package still deploys and the settings-apply step is skipped.
 
 What another developer needs to deploy their own copy:
 
 1. Provision their own Azure resources.
 2. Fill in their own local `prod-settings.json` from `prod-settings.example.json`.
 3. Set their own local user secrets for development.
-4. Push their own App Settings or Key Vault references during deployment.
+5. Configure either GitHub OIDC repo variables or the legacy `AZURE_CREDENTIALS` secret for the settings-apply step.
+6. Push their own App Settings or Key Vault references during deployment.
 
 This keeps the repository portable while letting every developer deploy an isolated environment.
 
