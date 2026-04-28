@@ -1,3 +1,4 @@
+using Azure;
 using Azure.AI.OpenAI;
 using Azure.Identity;
 using Azure.Storage.Blobs;
@@ -24,6 +25,7 @@ namespace ContactCenterPOC.Services
         private static readonly HashSet<string> SupportedTypes = new(StringComparer.OrdinalIgnoreCase) { ".pdf", ".docx", ".txt" };
         private const int ChunkSizeChars = 4000; // ~1024 tokens
         private const int OverlapChars = 800; // ~20% overlap
+        private const int MaxProcessingAttempts = 3;
 
         public KnowledgeBaseService(
             CosmosDbService cosmosDb, SearchService searchService,
@@ -100,11 +102,12 @@ namespace ContactCenterPOC.Services
             try
             {
                 doc.Status = DocumentStatus.Processing;
+                doc.ErrorMessage = null;
                 doc.ProcessingProgress = "Extracting text...";
                 await _cosmosDb.UpsertAsync(CosmosContainer, doc, doc.Id);
 
                 // Extract text from blob
-                var text = await ExtractTextAsync(doc);
+                var text = await ExecuteWithTransientRetriesAsync("extract document text", () => ExtractTextAsync(doc));
                 if (string.IsNullOrWhiteSpace(text))
                 {
                     doc.Status = DocumentStatus.Failed;
@@ -115,13 +118,20 @@ namespace ContactCenterPOC.Services
 
                 // Chunk text
                 var textChunks = ChunkText(text);
+                if (textChunks.Count == 0)
+                {
+                    doc.Status = DocumentStatus.Failed;
+                    doc.ErrorMessage = "No indexable text chunks could be created from document";
+                    await _cosmosDb.UpsertAsync(CosmosContainer, doc, doc.Id);
+                    return;
+                }
 
                 // Generate embeddings and create search chunks
                 doc.ProcessingProgress = "Generating embeddings...";
                 await _cosmosDb.UpsertAsync(CosmosContainer, doc, doc.Id);
 
                 var searchChunks = new List<KnowledgeChunk>();
-                var embeddings = await GenerateEmbeddingsAsync(textChunks);
+                var embeddings = await TryGenerateEmbeddingsForIndexingAsync(textChunks, doc.Id);
 
                 for (int i = 0; i < textChunks.Count; i++)
                 {
@@ -142,7 +152,7 @@ namespace ContactCenterPOC.Services
                 doc.ProcessingProgress = "Building search index...";
                 await _cosmosDb.UpsertAsync(CosmosContainer, doc, doc.Id);
 
-                await _searchService.IndexChunksAsync(searchChunks);
+                await ExecuteWithTransientRetriesAsync("index document chunks", () => _searchService.IndexChunksAsync(searchChunks));
 
                 doc.ChunkCount = searchChunks.Count;
                 doc.Status = DocumentStatus.Indexed;
@@ -160,7 +170,7 @@ namespace ContactCenterPOC.Services
             {
                 _logger.LogError(ex, "Failed to process document {Id}", documentId);
                 doc.Status = DocumentStatus.Failed;
-                doc.ErrorMessage = ex.Message;
+                doc.ErrorMessage = TruncateForStatus(ex.Message, 500);
                 doc.ProcessingProgress = null;
                 await _cosmosDb.UpsertAsync(CosmosContainer, doc, doc.Id);
 
@@ -194,6 +204,53 @@ namespace ContactCenterPOC.Services
             // Delete from Cosmos
             await _cosmosDb.DeleteAsync(CosmosContainer, id, id);
             _logger.LogInformation("Document '{FileName}' deleted", doc.FileName);
+        }
+
+        public async Task<KnowledgeDocument?> UpdateDocumentCampaignAsync(string id, string? campaignId)
+        {
+            var doc = await _cosmosDb.GetAsync<KnowledgeDocument>(CosmosContainer, id, id);
+            if (doc == null) return null;
+
+            if (doc.Status != DocumentStatus.Indexed)
+            {
+                throw new InvalidOperationException("Document campaign can be changed after processing completes.");
+            }
+
+            var normalizedCampaignId = string.IsNullOrWhiteSpace(campaignId) ? null : campaignId.Trim();
+            if (string.Equals(doc.CampaignId, normalizedCampaignId, StringComparison.Ordinal))
+            {
+                return doc;
+            }
+
+            doc.CampaignId = normalizedCampaignId;
+            doc.Status = DocumentStatus.Processing;
+            doc.ErrorMessage = null;
+            doc.ProcessingProgress = "Updating campaign link...";
+            await _cosmosDb.UpsertAsync(CosmosContainer, doc, doc.Id);
+
+            _ = Task.Run(() => ReprocessDocumentForCampaignChangeAsync(doc.Id));
+
+            return doc;
+        }
+
+        private async Task ReprocessDocumentForCampaignChangeAsync(string documentId)
+        {
+            try
+            {
+                await ExecuteWithTransientRetriesAsync("delete previous document chunks", () => _searchService.DeleteDocumentChunksAsync(documentId));
+                await ProcessDocumentAsync(documentId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to reprocess document {DocumentId} after campaign update", documentId);
+                var doc = await _cosmosDb.GetAsync<KnowledgeDocument>(CosmosContainer, documentId, documentId);
+                if (doc == null) return;
+
+                doc.Status = DocumentStatus.Failed;
+                doc.ErrorMessage = TruncateForStatus(ex.Message, 500);
+                doc.ProcessingProgress = null;
+                await _cosmosDb.UpsertAsync(CosmosContainer, doc, doc.Id);
+            }
         }
 
         public async Task<List<SearchResultItem>> SearchAsync(string query, int top = 5, string? campaignId = null)
@@ -236,9 +293,17 @@ namespace ContactCenterPOC.Services
         {
             var sb = new StringBuilder();
             using var document = PdfDocument.Open(stream);
-            foreach (var page in document.GetPages())
+            for (int pageNumber = 1; pageNumber <= document.NumberOfPages; pageNumber++)
             {
-                sb.AppendLine(page.Text);
+                try
+                {
+                    var page = document.GetPage(pageNumber);
+                    sb.AppendLine(page.Text);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to extract text from PDF page {PageNumber}; continuing with remaining pages", pageNumber);
+                }
             }
             return sb.ToString();
         }
@@ -282,6 +347,7 @@ namespace ContactCenterPOC.Services
         {
             var results = new List<float[]>();
             var openAiUri = _configuration["AzureOpenAI:EndpointUri"];
+            var apiKey = _configuration["AzureOpenAI:Key"];
             var embeddingDeployment = _configuration["AzureOpenAI:EmbeddingDeployment"] ?? "text-embedding-3-small";
 
             if (string.IsNullOrEmpty(openAiUri))
@@ -290,14 +356,18 @@ namespace ContactCenterPOC.Services
                 return results;
             }
 
-            var client = new AzureOpenAIClient(new Uri(openAiUri), new DefaultAzureCredential());
+            var client = string.IsNullOrWhiteSpace(apiKey)
+                ? new AzureOpenAIClient(new Uri(openAiUri), new DefaultAzureCredential())
+                : new AzureOpenAIClient(new Uri(openAiUri), new AzureKeyCredential(apiKey));
             var embeddingClient = client.GetEmbeddingClient(embeddingDeployment);
 
             // Process in batches of 16
             for (int i = 0; i < texts.Count; i += 16)
             {
                 var batch = texts.Skip(i).Take(16).ToList();
-                var response = await embeddingClient.GenerateEmbeddingsAsync(batch);
+                var response = await ExecuteWithTransientRetriesAsync(
+                    $"generate embeddings batch {i / 16 + 1}",
+                    () => embeddingClient.GenerateEmbeddingsAsync(batch));
 
                 foreach (var embedding in response.Value)
                 {
@@ -306,6 +376,94 @@ namespace ContactCenterPOC.Services
             }
 
             return results;
+        }
+
+        private async Task<List<float[]>> TryGenerateEmbeddingsForIndexingAsync(List<string> textChunks, string documentId)
+        {
+            try
+            {
+                var embeddings = await GenerateEmbeddingsAsync(textChunks);
+                if (embeddings.Count != textChunks.Count)
+                {
+                    _logger.LogWarning(
+                        "Generated {EmbeddingCount} embeddings for {ChunkCount} chunks in document {DocumentId}; missing vectors will be indexed as keyword-only chunks",
+                        embeddings.Count,
+                        textChunks.Count,
+                        documentId);
+                }
+
+                return embeddings;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Embedding generation unavailable for document {DocumentId}; indexing keyword-only chunks instead",
+                    documentId);
+                return new List<float[]>();
+            }
+        }
+
+        private async Task ExecuteWithTransientRetriesAsync(string operationName, Func<Task> operation)
+        {
+            await ExecuteWithTransientRetriesAsync(operationName, async () =>
+            {
+                await operation();
+                return true;
+            });
+        }
+
+        private async Task<T> ExecuteWithTransientRetriesAsync<T>(string operationName, Func<Task<T>> operation)
+        {
+            for (int attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    return await operation();
+                }
+                catch (Exception ex) when (attempt < MaxProcessingAttempts && IsTransientProcessingException(ex))
+                {
+                    var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
+                    _logger.LogWarning(
+                        ex,
+                        "Transient failure during {OperationName}; retrying attempt {NextAttempt}/{MaxAttempts} after {DelaySeconds}s",
+                        operationName,
+                        attempt + 1,
+                        MaxProcessingAttempts,
+                        delay.TotalSeconds);
+                    await Task.Delay(delay);
+                }
+            }
+        }
+
+        internal static bool IsTransientProcessingException(Exception ex)
+        {
+            if (ex is RequestFailedException requestFailed)
+            {
+                return requestFailed.Status == 408
+                    || requestFailed.Status == 409
+                    || requestFailed.Status == 429
+                    || requestFailed.Status >= 500;
+            }
+
+            if (ex is HttpRequestException || ex is TimeoutException || ex is TaskCanceledException || ex is IOException)
+            {
+                return true;
+            }
+
+            var statusProperty = ex.GetType().GetProperty("Status");
+            if (statusProperty?.GetValue(ex) is int status)
+            {
+                return status == 408 || status == 409 || status == 429 || status >= 500;
+            }
+
+            return false;
+        }
+
+        private static string TruncateForStatus(string value, int maxLength)
+        {
+            if (string.IsNullOrEmpty(value) || value.Length <= maxLength) return value;
+            return value.Substring(0, maxLength);
         }
 
         // Called by knowledge gap publish workflow
@@ -323,7 +481,7 @@ namespace ContactCenterPOC.Services
             await _cosmosDb.UpsertAsync(CosmosContainer, doc, doc.Id);
 
             var textChunks = ChunkText(content);
-            var embeddings = await GenerateEmbeddingsAsync(textChunks);
+            var embeddings = await TryGenerateEmbeddingsForIndexingAsync(textChunks, doc.Id);
             var searchChunks = new List<KnowledgeChunk>();
 
             for (int i = 0; i < textChunks.Count; i++)
@@ -341,7 +499,7 @@ namespace ContactCenterPOC.Services
                 });
             }
 
-            await _searchService.IndexChunksAsync(searchChunks);
+            await ExecuteWithTransientRetriesAsync("index generated knowledge document chunks", () => _searchService.IndexChunksAsync(searchChunks));
 
             doc.ChunkCount = searchChunks.Count;
             doc.Status = DocumentStatus.Indexed;

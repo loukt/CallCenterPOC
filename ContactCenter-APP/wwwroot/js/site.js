@@ -2198,6 +2198,7 @@
 
     var kbCampaignFilter = "";
     var kbPollingTimer = null;
+    var kbCampaigns = [];
 
     window.setKBCampaignFilter = function (value) {
         kbCampaignFilter = value;
@@ -2210,13 +2211,16 @@
         fetch(apiBaseUrl() + "/api/Campaign")
             .then(function (r) { return r.json(); })
             .then(function (campaigns) {
+                kbCampaigns = campaigns || [];
                 select.innerHTML = '<option value="">All Campaigns</option>';
-                (campaigns || []).forEach(function (c) {
+                kbCampaigns.forEach(function (c) {
                     var opt = document.createElement("option");
                     opt.value = c.id;
                     opt.textContent = c.title;
                     select.appendChild(opt);
                 });
+                select.value = kbCampaignFilter;
+                loadKBDocuments();
             })
             .catch(function () { /* ignore */ });
     }
@@ -2248,17 +2252,24 @@
                         }
                         var est = estimateProcessingTime(doc.fileSizeBytes);
                         progressText += '<div class="text-muted small">Estimated: ~' + est + '</div>';
+                    } else if (doc.status === "Failed" && doc.errorMessage) {
+                        progressText = '<div class="text-danger small">' + escapeHtml(doc.errorMessage) + '</div>';
                     }
-                    var campaignLabel = doc.campaignId ? '<span class="badge bg-info ms-1" title="Campaign-specific">Campaign</span>' : '';
+                    var campaignName = getKBCampaignName(doc.campaignId);
+                    var campaignLabel = doc.campaignId
+                        ? '<span class="badge bg-info ms-1" title="Campaign-specific">' + escapeHtml(campaignName) + '</span>'
+                        : '<span class="badge bg-secondary ms-1" title="Available to all campaigns">Global</span>';
+                    var campaignControl = renderKBCampaignControl(doc);
                     var card = document.createElement("div");
                     card.className = "document-card";
-                    card.innerHTML = '<div class="d-flex justify-content-between align-items-center">' +
+                    card.innerHTML = '<div class="d-flex justify-content-between align-items-start gap-2">' +
                         '<div><strong>' + escapeHtml(doc.fileName) + '</strong>' +
                         '<span class="badge ms-2 ' + statusClass + '">' + statusIcon + ' ' + doc.status + '</span>' + campaignLabel + '</div>' +
                         '<div class="d-flex gap-1">' +
                         (doc.status === "Failed" ? '<button class="btn btn-sm btn-outline-warning" onclick="retryDocument(\'' + doc.id + '\')">Retry</button>' : '') +
                         '<button class="btn btn-sm btn-outline-danger" onclick="deleteDocument(\'' + doc.id + '\')">Delete</button></div></div>' +
                         progressText +
+                        campaignControl +
                         '<div class="text-muted small">' + doc.fileType + ' · ' + formatBytes(doc.fileSizeBytes) +
                         (doc.chunkCount > 0 ? ' · ' + doc.chunkCount + ' chunks' : '') + '</div>';
                     listEl.appendChild(card);
@@ -2275,6 +2286,27 @@
         if (mb < 1) return "30s";
         if (mb < 10) return "1 min";
         return "2 min";
+    }
+
+    function getKBCampaignName(campaignId) {
+        if (!campaignId) return "Global";
+        var match = kbCampaigns.find(function (c) { return c.id === campaignId; });
+        return match ? match.title : "Campaign";
+    }
+
+    function renderKBCampaignControl(doc) {
+        var disabled = doc.status !== "Indexed" ? " disabled" : "";
+        var title = doc.status !== "Indexed" ? "Campaign can be changed after processing completes" : "Link this document to a campaign";
+        var html = '<div class="d-flex align-items-center gap-2 mt-2 kb-document-campaign">' +
+            '<span class="text-muted small">Linked to</span>' +
+            '<select class="form-select form-select-sm" style="max-width:220px;" title="' + title + '" onchange="updateKBDocumentCampaign(\'' + doc.id + '\', this.value)"' + disabled + '>' +
+            '<option value=""' + (!doc.campaignId ? ' selected' : '') + '>Global</option>';
+
+        kbCampaigns.forEach(function (campaign) {
+            html += '<option value="' + escapeHtml(campaign.id) + '"' + (doc.campaignId === campaign.id ? ' selected' : '') + '>' + escapeHtml(campaign.title) + '</option>';
+        });
+
+        return html + '</select></div>';
     }
 
     function startKBPolling() {
@@ -2302,6 +2334,31 @@
     window.retryDocument = function (id) {
         fetch(apiBaseUrl() + "/api/knowledgebase/" + id + "/retry", { method: "POST" })
             .then(function () { loadKBDocuments(); });
+    };
+
+    window.updateKBDocumentCampaign = function (id, campaignId) {
+        fetch(apiBaseUrl() + "/api/knowledgebase/" + id + "/campaign", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ campaignId: campaignId || null })
+        })
+            .then(function (response) {
+                if (!response.ok) {
+                    return response.json().catch(function () { return {}; }).then(function (body) {
+                        throw new Error(body.error || body.message || "Failed to update campaign");
+                    });
+                }
+                return response.json();
+            })
+            .then(function () {
+                showToast("Document campaign update started", "success");
+                loadKBDocuments();
+                startKBPolling();
+            })
+            .catch(function (err) {
+                showToast(err.message, "error");
+                loadKBDocuments();
+            });
     };
 
     // File upload via button

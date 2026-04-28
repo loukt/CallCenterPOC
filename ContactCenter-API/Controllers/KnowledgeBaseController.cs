@@ -74,6 +74,34 @@ namespace ContactCenterPOC.Controllers
             return Accepted(new { message = "Document reprocessing started", id });
         }
 
+        [HttpPatch("{id}/campaign")]
+        public async Task<IActionResult> UpdateDocumentCampaign(string id, [FromBody] UpdateKnowledgeDocumentCampaignRequest request)
+        {
+            try
+            {
+                var doc = await _knowledgeBaseService.UpdateDocumentCampaignAsync(id, request?.CampaignId);
+                if (doc == null)
+                    return NotFound(new { error = "Document not found" });
+
+                return Accepted(new
+                {
+                    message = "Document campaign update started",
+                    id = doc.Id,
+                    campaignId = doc.CampaignId,
+                    status = doc.Status.ToString()
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to update campaign for knowledge document {Id}", id);
+                return StatusCode(500, new { error = "Failed to update document campaign", message = ex.Message });
+            }
+        }
+
         [HttpPost("search")]
         public async Task<IActionResult> Search([FromBody] SearchRequest request)
         {
@@ -89,6 +117,11 @@ namespace ContactCenterPOC.Controllers
     {
         public string Query { get; set; } = string.Empty;
         public int Top { get; set; } = 5;
+        public string? CampaignId { get; set; }
+    }
+
+    public class UpdateKnowledgeDocumentCampaignRequest
+    {
         public string? CampaignId { get; set; }
     }
 }
