@@ -183,8 +183,7 @@ jobs:
           az webapp config appsettings delete `
             --resource-group ${{ env.API_RESOURCE_GROUP }} `
             --name ${{ env.API_APP_NAME }} `
-            --setting-names VoiceLive__Key `
-            --yes | Out-Null
+            --setting-names VoiceLive__Key | Out-Null
 
   deploy-app:
     name: Deploy APP
