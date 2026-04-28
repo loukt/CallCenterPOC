@@ -19,6 +19,10 @@
 - Q: Where should the escalation phone number be configured? → A: Both — default escalation number in Settings, with optional per-campaign override. Fallback chain: campaign override → settings default → dashboard-notification-only (case + callback request). For internet calls, escalation sends a dashboard notification and the operator clicks "Join Escalation."
 - Q: How should internet-based callers be identified for case matching when no phone number exists? → A: Caller self-identification — the Join Call page asks for name + optional email/phone before connecting; this is used for case matching and deduplication.
 - Q: When does a case transition to "InProgress" status? → A: Automatically when a follow-up call begins on an existing open case, indicating active handling.
+- Q: How should Success Criterion 7 (Escalation Success Rate) account for fallback paths where no live phone transfer occurs? → A: Broaden to cover all paths — live call transfer, WebRTC operator join, or dashboard notification with case creation. AI verbal summary applies to connected-transfer cases only.
+- Q: Should the hold message when concurrent call limit is reached be hardcoded or configurable via Settings? → A: Configurable — add a HoldMessage string field to OperatorSettings so operators can customize the text via the Settings UI.
+- Q: Should US3-AS5 (no operator available for escalation) include callback scheduling or just case creation? → A: Simplify — the AI takes a message and creates a case record with Escalation priority. No callback scheduling needed for POC.
+- Q: What time bound should NFR-004 (intent discovery batch of 1,000 transcripts) have? → A: Within 10 minutes.
 
 ---
 
@@ -75,9 +79,9 @@ As a contact center operator, I want the system to receive and handle inbound ph
 2. **Given** an inbound call is answered by the AI agent, **When** the caller speaks, **Then** the AI agent responds using the configured default inbound campaign and references the knowledge base.
 3. **Given** an inbound call is in progress, **When** the operator views the dashboard, **Then** the call appears in the live calls panel with an "Inbound" badge, showing real-time transcript and sentiment.
 4. **Given** the AI agent cannot resolve the caller's issue, **When** escalation is triggered, **Then** the system adds a human operator to the live call, the AI verbally introduces the caller and summarizes the conversation (intent, key points, suggested actions), and then the AI disconnects — leaving the operator and caller on the line.
-5. **Given** no operators are available for escalation, **When** the AI cannot help further, **Then** the system offers to take a message or schedule a callback, and creates a case record.
-6. **Given** an inbound call arrives, **When** a campaign with inbound routing rules is configured, **Then** the system routes the call to the appropriate AI behavior based on the called number or IVR menu selection.
-7. **Given** multiple inbound calls arrive simultaneously, **When** the concurrent call limit is reached, **Then** additional callers hear a configurable hold message or are asked to call back.
+5. **Given** no operators are available for escalation, **When** the AI cannot help further, **Then** the system offers to take a message and creates a case record with "Escalation" priority.
+6. **Given** an inbound call arrives, **When** a campaign with inbound routing rules is configured, **Then** the system routes the call to the appropriate AI agent behavior based on the called number and campaign mapping.
+7. **Given** multiple inbound calls arrive simultaneously, **When** the concurrent call limit is reached, **Then** additional callers hear the hold message configured in OperatorSettings (default: "All agents are currently busy. Please try again later.") or are asked to call back.
 
 ---
 
@@ -111,7 +115,7 @@ As a contact center system, I want an AI agent that automatically creates, updat
 **Acceptance Scenarios**:
 
 1. **Given** a call ends where the customer reported a new issue, **When** the call record is saved, **Then** the Case Management Agent automatically creates a case with: title (derived from intent), description (call summary), priority (derived from sentiment and urgency), status ("Open"), and linked call record.
-2. **Given** a customer calls back about an existing open case, **When** the system matches the caller's phone number to an existing case, **Then** the Case Management Agent transitions the case to "InProgress," updates it with the new interaction details, and appends the transcript.
+2. **Given** a customer calls back about an existing open case, **When** the system matches the caller's phone number or email to an existing case, **Then** the Case Management Agent transitions the case to "InProgress," updates it with the new interaction details, and appends the transcript.
 3. **Given** a call ends where the issue was resolved, **When** the AI determines the customer confirmed resolution, **Then** the Case Management Agent sets the case status to "Resolved" and adds a resolution summary.
 4. **Given** the administrator wants to review all open cases, **When** they navigate to the Cases view, **Then** they see a list of all cases with status, priority, linked calls, and time since creation.
 5. **Given** a case has been in "Resolved" status for 48 hours without re-contact, **When** the auto-close window expires, **Then** the Case Management Agent changes the status to "Closed."
@@ -167,7 +171,7 @@ As a supervisor, I want an AI agent that automatically evaluates the quality of 
 ### Inbound Call Handling
 
 - **FR-007**: The system shall accept inbound calls on configured ACS phone numbers and route them to the AI agent.
-- **FR-008**: The system shall support configurable inbound routing rules that map phone numbers to specific campaigns or AI behaviors.
+- **FR-008**: The system shall support configurable inbound routing rules that map phone numbers to specific campaigns or default AI agent behavior.
 - **FR-009**: The system shall support AI-to-operator escalation during calls (inbound and outbound) by adding the operator to the live call, having the AI verbally introduce the context, and then removing the AI from the call.
 - **FR-031**: The system shall support escalation number configuration at two levels: a global default escalation phone number in Settings, and an optional per-campaign escalation number override. When escalation is triggered, the system uses the campaign-level number if set, otherwise the Settings default. If no number is configured at either level, escalation creates a dashboard notification with a case and callback request instead of a live transfer. For internet-based calls, escalation sends a real-time dashboard notification and the operator clicks "Join Escalation" to be added via WebRTC.
 - **FR-010**: The system shall distinguish inbound and outbound calls visually in the dashboard and call history.
@@ -177,7 +181,7 @@ As a supervisor, I want an AI agent that automatically evaluates the quality of 
 
 - **FR-012**: The system shall support an alternative internet-based calling mode (WebRTC) that operates without phone network connectivity, activated via a "Call over Internet" checkbox in settings.
 - **FR-013**: The system shall generate shareable call links when in WebRTC mode. Links expire after a configurable time window (default: 15 minutes) and are single-use (invalidated after the first user joins).
-- **FR-014**: The system shall establish peer-to-peer audio connections through a signaling server, with the AI agent processing audio in the same pipeline as ACS calls.
+- **FR-014**: The system shall establish audio connections through a SignalR server relay, with the AI agent processing audio in the same pipeline as ACS calls.
 - **FR-015**: The system shall support switching between phone and internet calling modes without application restart. When "Call over Internet" is enabled, phone number input fields are hidden and replaced with link generation controls.
 
 ### Case Management
@@ -209,21 +213,35 @@ As a supervisor, I want an AI agent that automatically evaluates the quality of 
 ### Knowledge & Campaign Behavior
 
 - **FR-030**: Campaigns shall support a "restrict to provided data only" flag. When enabled, the AI agent must only answer from knowledge base content and shall not fall back to general model knowledge. If the knowledge base is unavailable or returns no results, the AI states it cannot answer and suggests escalation.
+- **FR-032**: Knowledge documents shall support an optional `campaignId` field. When assigned, the document is only searchable during calls associated with that specific campaign. Documents without a `campaignId` are searchable across all campaigns (global KB).
+- **FR-033**: The KB management UI shall display a campaign selector dropdown when uploading or editing a document. The default is "All Campaigns" (global). Only documents matching the active campaign (or global documents) shall be returned during AI hybrid search.
+- **FR-034**: The KB search endpoint shall accept an optional `campaignId` filter parameter. When provided, results are limited to documents tagged with that campaign or untagged (global) documents.
+
+### Dashboard Analytics
+
+- **FR-035**: The dashboard shall provide a time-range filter for analytics (Today, Yesterday, Last 7 Days, Last 30 Days, Year) that applies to: call history counts, sentiment trends, case statistics, and quality evaluation scores.
+- **FR-036**: The API shall expose a `/api/analytics/dashboard` endpoint that returns aggregated KPI data (total calls, average duration, sentiment breakdown, case counts by status, quality scores) filtered by the requested time range.
+- **FR-037**: The dashboard KPI bar shall update dynamically when the time range is changed, without page reload.
+
+### KB Processing UX
+
+- **FR-038**: The Knowledge Base upload UI shall show real-time processing progress with the following states and visual indicators: Uploading (progress bar), Processing (animated spinner with "Extracting text..."), Indexing (spinner with "Building search index..."), Indexed (green checkmark with "Ready — searchable"), Failed (red X with error message and Retry button).
+- **FR-039**: The system shall display an estimated processing time when a document upload begins (based on file size: <1MB ≈ 30s, 1-10MB ≈ 1min, 10-50MB ≈ 2min).
 
 ---
 
 ## Success Criteria *(mandatory)*
 
-1. **Intent Recognition Accuracy**: The AI correctly identifies caller intent in at least 80% of calls where intent is discoverable from the knowledge base and historical data.
-2. **Knowledge Base Response Time**: Uploaded documents are searchable within 2 minutes of upload completion.
+1. **Intent Recognition Accuracy**: The AI correctly identifies caller intent in at least 80% of calls where the knowledge base and historical transcripts contain relevant information for the caller's stated purpose.
+2. **Knowledge Base Response Time**: Uploaded documents are searchable within 2 minutes of upload completion (see NFR-001).
 3. **Inbound Call Answer Time**: The system answers inbound calls and connects the AI agent within 3 seconds of the call being received.
 4. **Case Auto-Creation Rate**: At least 90% of calls that involve a customer issue result in an automatically created or updated case record.
 5. **Quality Evaluation Coverage**: 100% of completed calls receive an automated quality evaluation within 60 seconds of call completion.
 6. **WebRTC Call Quality**: Browser-to-browser calls maintain conversational audio quality (no perceptible lag or dropout) for calls up to 10 minutes.
-7. **Escalation Success Rate**: When the AI escalates to a human operator, 100% of escalations result in a live call transfer where the AI verbally summarizes the context before disconnecting.
+7. **Escalation Success Rate**: 100% of escalation attempts result in either a live call transfer, a WebRTC operator join, or a dashboard notification with case creation. In all connected-transfer cases, the AI verbally summarizes the context before disconnecting.
 8. **Knowledge Gap Detection**: The system identifies at least 70% of repeated unanswered questions within the first week of operation.
-9. **Operator Efficiency**: Operators spend less than 1 minute on post-call documentation per call due to automated case management.
-10. **All Existing Features Preserved**: All current capabilities (outbound calling, campaigns, sentiment analysis, emotion analysis, call history, VoiceLive voices, settings management) continue to function without regression.
+9. **Operator Efficiency**: Operators spend less than 1 minute on post-call documentation per call due to automated case management. Measured by observation during demos, not automated testing.
+10. **All Existing Features Preserved**: All current capabilities continue to function without regression (see NFR-007).
 
 ---
 
@@ -257,6 +275,9 @@ As a supervisor, I want an AI agent that automatically evaluates the quality of 
 | UploadedBy | string | Operator who uploaded |
 | UploadedAt | DateTimeOffset | Upload timestamp |
 | ErrorMessage | string? | Error details if processing failed |
+| BlobUri | string | Reference to uploaded file in Blob Storage |
+| CampaignId | string? | Optional campaign ID — null means global (searchable by all campaigns) |
+| ProcessingProgress | string? | Current processing stage description for UX display |
 
 ### Case
 
@@ -266,8 +287,12 @@ As a supervisor, I want an AI agent that automatically evaluates the quality of 
 | Title | string | Derived from intent or call summary |
 | Description | string | Case details from call transcript |
 | Status | enum | Open, InProgress, Resolved, Closed. Transitions: Open → InProgress (follow-up call begins), InProgress → Resolved (issue confirmed resolved), Resolved → Closed (48h auto-close) |
-| Priority | enum | Low, Medium, High, Critical |
+| Priority | enum | Low, Medium, High, Critical, Escalation |
 | CallerPhoneNumber | string | Masked phone number |
+| CallerName | string? | Self-provided caller name (WebRTC) or contact name (outbound) |
+| CallerEmail | string? | Self-provided email (WebRTC, optional, for case matching) |
+| CallSource | string | Call origin: "Phone", "Inbound", or "Internet" |
+| CampaignId | string? | Associated campaign ID |
 | LinkedCallRecords | string[] | Associated call record IDs |
 | Intent | string? | Detected customer intent |
 | ResolutionSummary | string? | How the issue was resolved |
@@ -311,6 +336,35 @@ As a supervisor, I want an AI agent that automatically evaluates the quality of 
 | CallerPhone | string? | Self-provided phone (optional, for case matching) |
 | CallerConnectionId | string? | SignalR connection ID of the caller |
 | OperatorConnectionId | string | SignalR connection ID of the operator |
+| CampaignId | string? | Associated campaign ID |
+
+### KnowledgeGap
+
+| Field | Type | Description |
+|-------|------|-------------|
+| Id | string (GUID) | Unique identifier |
+| Topic | string | The unanswered question or topic |
+| Frequency | int | How many times this gap has been encountered |
+| Status | enum | Identified, ArticleDrafted, Published, Dismissed |
+| SampleQuestions | string[] | Example caller questions that triggered this gap |
+| SuggestedTitle | string? | AI-generated title for the draft article |
+| SuggestedArticle | string? | AI-generated draft article text |
+| LinkedCallRecordIds | string[] | Call records where the gap was detected |
+| LastOccurrence | DateTimeOffset | When the gap was most recently encountered |
+| CreatedAt | DateTimeOffset | When the gap was first identified |
+
+### AgentActivityEntry
+
+| Field | Type | Description |
+|-------|------|-------------|
+| Id | string (GUID) | Unique identifier |
+| AgentName | string | Name of the agent (e.g., "CaseManagement", "QualityEvaluation") |
+| ActionType | string | Type of action performed (e.g., "CaseCreated", "IntentDiscovered") |
+| CallRecordId | string? | Associated call record ID, if applicable |
+| Result | enum | Success, Failure, Skipped |
+| DurationMs | long | How long the action took in milliseconds |
+| ResultDetail | string? | Additional context or error message |
+| Timestamp | DateTimeOffset | When the action occurred |
 
 ---
 
@@ -319,7 +373,7 @@ As a supervisor, I want an AI agent that automatically evaluates the quality of 
 - **NFR-001**: Knowledge base document processing (upload to searchable) shall complete within 2 minutes for documents up to 50 MB.
 - **NFR-002**: Hybrid search queries against the knowledge base shall return results within 500 milliseconds.
 - **NFR-003**: The system shall support at least 100 documents in the knowledge base simultaneously.
-- **NFR-004**: Intent discovery shall handle analysis of up to 1,000 historical call transcripts in a single run.
+- **NFR-004**: Intent discovery shall complete analysis of up to 1,000 historical call transcripts within 10 minutes in a single run.
 - **NFR-005**: Quality evaluations shall complete within 60 seconds of call termination.
 - **NFR-006**: WebRTC audio latency shall not exceed 200 milliseconds round-trip for browser-to-server communication.
 - **NFR-007**: The system shall maintain backward compatibility with all existing features (outbound calls, campaigns, sentiment, emotion, call history, VoiceLive, settings).
@@ -365,7 +419,7 @@ As a supervisor, I want an AI agent that automatically evaluates the quality of 
 | Azure Communication Services | Telephony for inbound and outbound PSTN calls | Existing |
 | Azure OpenAI Service | AI agent conversation (Realtime API), sentiment, emotion, summaries, intent discovery, quality evaluation | Existing |
 | Azure AI VoiceLive | Alternative voice engine with Dragon HD voices | Existing |
-| Azure AI Search | Knowledge base indexing and hybrid retrieval | New — must be provisioned |
+| Azure AI Search | Knowledge base indexing and hybrid retrieval | New — must be provisioned (Free tier, Southeast Asia, RBAC auth via Managed Identity) |
 | Azure Cosmos DB (NoSQL API) | Structured persistence for cases, intents, quality evaluations, and knowledge gap records | New — must be provisioned |
 | Azure Blob Storage | Document storage, call recordings, case records, knowledge articles | Existing |
 | Azure AI Document Intelligence (optional) | Enhanced PDF/DOCX text extraction for complex layouts | New — optional, can fallback to built-in extraction |
@@ -443,7 +497,7 @@ The existing three-panel dashboard evolves to accommodate new features:
 - **Unsupported file format**: Only PDF, DOCX, and TXT are accepted; other formats show a validation error.
 - **Knowledge base search returns no results**: The AI falls back to its general knowledge and indicates it couldn't find specific documentation — unless the campaign is configured with a "restrict to provided data only" flag, in which case the AI states it cannot answer that question and suggests escalation.
 - **Azure AI Search unavailable during call**: If the search service is temporarily unreachable, the AI continues using general knowledge (for unrestricted campaigns) or declines to answer (for data-restricted campaigns). The failure is logged in the agent activity log.
-- **Concurrent inbound + outbound at limit**: When 5 calls are active, additional inbound callers hear a configurable "all agents busy" message.
+- **Concurrent inbound + outbound at limit**: When 5 calls are active, additional inbound callers hear the hold message from OperatorSettings (default: "All agents are currently busy. Please try again later.").
 - **WebRTC browser compatibility**: If the browser doesn't support WebRTC (getUserMedia), the join page shows a compatibility error with supported browser suggestions.
 - **Caller hangs up during intent identification**: The system saves the partial transcript and any partially detected intent for future analysis.
 - **Case deduplication**: If the same caller calls about the same intent within 24 hours, the system updates the existing case rather than creating a new one.
@@ -451,6 +505,6 @@ The existing three-panel dashboard evolves to accommodate new features:
 - **WebRTC NAT traversal failure**: If peer connection cannot be established, the system shows a "Connection failed — try a different network" message.
 - **Expired or used WebRTC link**: If a user opens an expired or already-used call link, the join page shows "This link has expired or has already been used" with no option to join.
 - **Document processing failure**: Failed documents show the error reason and offer a "Retry" button.
-- **Escalation when no operator is online**: If no operator is connected to the dashboard when escalation is triggered, the AI informs the caller, offers to take a message or schedule a callback, and creates a case record.
+- **Escalation when no operator is online**: If no operator is connected to the dashboard when escalation is triggered, the AI informs the caller, offers to take a message, and creates a case record with "Escalation" priority.
 - **Escalation during WebRTC calls**: The operator joins the WebRTC call via the same signaling infrastructure; the AI verbal handoff and disconnect behavior is identical to ACS calls.
 - **No escalation number configured**: If neither the campaign nor settings has an escalation phone number, the system cannot perform a live phone transfer. Instead, the AI informs the caller that a human will follow up, creates a case marked as "Escalation" priority, and sends a dashboard notification with a callback request.

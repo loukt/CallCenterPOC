@@ -387,6 +387,10 @@
             handleEmotionUpdate(data.callConnectionId, data.entryTimestamp, data.emotion);
         });
 
+        connection.on("AgentProcessingUpdate", function (data) {
+            handleAgentProcessingUpdate(data);
+        });
+
         connection.onreconnecting(function () {
             console.warn("SignalR reconnecting...");
         });
@@ -1109,6 +1113,8 @@
     // KPI TRACKING
     // ═══════════════════════════════════════════════════════════
 
+    var kpiTimeRange = sessionStorage.getItem("callcenter_kpi_range") || "today";
+
     function loadKpiState() {
         try {
             var saved = sessionStorage.getItem("callcenter_kpi");
@@ -1126,6 +1132,48 @@
         try {
             sessionStorage.setItem("callcenter_kpi", JSON.stringify(kpiState));
         } catch (e) { /* ignore */ }
+    }
+
+    window.setKpiTimeRange = function (range) {
+        kpiTimeRange = range;
+        sessionStorage.setItem("callcenter_kpi_range", range);
+        document.querySelectorAll(".kpi-range-pill").forEach(function (pill) {
+            pill.classList.toggle("active", pill.dataset.range === range);
+        });
+        fetchAnalyticsDashboard(range);
+    };
+
+    function fetchAnalyticsDashboard(range) {
+        fetch(apiBaseUrl() + "/api/analytics/dashboard?range=" + encodeURIComponent(range))
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                var callsEl = document.getElementById("kpiCallsToday");
+                var durationEl = document.getElementById("kpiAvgDuration");
+                var sentimentEl = document.getElementById("kpiSentiment");
+                var successEl = document.getElementById("kpiSuccessRate");
+                var labelEl = document.getElementById("kpiCallsLabel");
+
+                if (callsEl) callsEl.textContent = data.totalCalls;
+                if (durationEl) {
+                    var avg = Math.round(data.avgDurationSeconds);
+                    durationEl.textContent = formatTimer(avg);
+                }
+                if (sentimentEl) {
+                    sentimentEl.textContent = data.sentimentBreakdown.positive > 0
+                        ? Math.round(data.sentimentBreakdown.positive) + "%"
+                        : "—";
+                }
+                if (successEl) {
+                    successEl.textContent = data.successRate > 0
+                        ? Math.round(data.successRate) + "%"
+                        : "—";
+                }
+                if (labelEl) {
+                    var rangeLabels = { today: "Calls Today", yesterday: "Calls Yesterday", "7d": "Calls (7 Days)", "30d": "Calls (30 Days)", year: "Calls (Year)" };
+                    labelEl.textContent = rangeLabels[range] || "Calls Today";
+                }
+            })
+            .catch(function () { /* fall back to session KPIs */ renderKPIs(); });
     }
 
     function renderKPIs() {
@@ -1840,6 +1888,9 @@
         // Render KPIs from session
         renderKPIs();
 
+        // Fetch analytics dashboard from API
+        fetchAnalyticsDashboard(kpiTimeRange);
+
         // Load settings into overlay
         loadSettings();
     });
@@ -1919,10 +1970,35 @@
 
                 // Toggle VoiceLive-specific sections
                 updateVoiceLiveSections(settings.voiceApiMode);
+
+                // Update the active badge to match the saved mode
+                updateActiveModeBadge(settings.voiceApiMode);
             })
             .catch(function (err) {
                 console.error("Failed to load settings:", err);
             });
+    }
+
+    function updateActiveModeBadge(mode) {
+        // Remove active class and badge from all options
+        var allOptions = document.querySelectorAll('.settings-radio-option');
+        allOptions.forEach(function (opt) {
+            opt.classList.remove('active');
+            var badge = opt.querySelector('.active-badge');
+            if (badge) badge.remove();
+        });
+        // Add active class and badge to the selected option
+        var selectedRadio = document.querySelector('input[name="voiceApiMode"][value="' + mode + '"]');
+        if (selectedRadio) {
+            var label = selectedRadio.closest('.settings-radio-option');
+            if (label) {
+                label.classList.add('active');
+                var badge = document.createElement('span');
+                badge.className = 'radio-badge active-badge';
+                badge.textContent = 'Active';
+                label.appendChild(badge);
+            }
+        }
     }
 
     function updateVoiceLiveSections(mode) {
@@ -1940,37 +2016,53 @@
             if (transcriptionGroup) transcriptionGroup.classList.remove("d-none");
 
             // Update voice label and description for VoiceLive
-            if (voiceLabel) voiceLabel.textContent = "Dragon HD Voice";
-            if (voiceDesc) voiceDesc.textContent = "Choose the Dragon HD voice used by the AI agent during VoiceLive calls.";
+            if (voiceLabel) voiceLabel.textContent = "AI Voice";
+            if (voiceDesc) voiceDesc.textContent = "Choose the voice used by the AI agent during VoiceLive calls.";
 
-            // Swap voice dropdown to Dragon HD voices
+            // Swap voice dropdown to VoiceLive voices grouped by voice type then locale
             if (voiceSelect && window._vlAvailableVoices && window._vlAvailableVoices.length > 0) {
                 voiceSelect.innerHTML = "";
-                // Group by locale
-                var grouped = {};
+                // Separate voices by voice type
+                var voiceTypes = {};
                 window._vlAvailableVoices.forEach(function (v) {
-                    var locale = v.locale || "Unknown";
-                    if (!grouped[locale]) grouped[locale] = [];
-                    grouped[locale].push(v);
+                    var vtype = v.voiceType || "DragonHD";
+                    if (!voiceTypes[vtype]) voiceTypes[vtype] = [];
+                    voiceTypes[vtype].push(v);
                 });
-                // Sort locales, en-US first
-                var locales = Object.keys(grouped).sort(function (a, b) {
-                    if (a.startsWith("en-US")) return -1;
-                    if (b.startsWith("en-US")) return 1;
+                // Render each voice type section (DragonHD first, then MAI-Voice-1, etc.)
+                var typeOrder = Object.keys(voiceTypes).sort(function (a, b) {
+                    if (a === "DragonHD") return -1;
+                    if (b === "DragonHD") return 1;
                     return a.localeCompare(b);
                 });
-                locales.forEach(function (locale) {
-                    var optgroup = document.createElement("optgroup");
-                    optgroup.label = locale;
-                    grouped[locale].sort(function (a, b) {
-                        return (a.displayName || "").localeCompare(b.displayName || "");
-                    }).forEach(function (v) {
-                        var opt = document.createElement("option");
-                        opt.value = v.fullName;
-                        opt.textContent = v.displayName + " (" + locale + ") — " + v.gender;
-                        optgroup.appendChild(opt);
+                typeOrder.forEach(function (vtype) {
+                    var voices = voiceTypes[vtype];
+                    // Group by locale within each voice type
+                    var grouped = {};
+                    voices.forEach(function (v) {
+                        var locale = v.locale || "Unknown";
+                        if (!grouped[locale]) grouped[locale] = [];
+                        grouped[locale].push(v);
                     });
-                    voiceSelect.appendChild(optgroup);
+                    var locales = Object.keys(grouped).sort(function (a, b) {
+                        if (a.startsWith("en-US")) return -1;
+                        if (b.startsWith("en-US")) return 1;
+                        return a.localeCompare(b);
+                    });
+                    locales.forEach(function (locale) {
+                        var optgroup = document.createElement("optgroup");
+                        var typeLabel = vtype === "DragonHD" ? "Dragon HD" : vtype;
+                        optgroup.label = typeLabel + " — " + locale;
+                        grouped[locale].sort(function (a, b) {
+                            return (a.displayName || "").localeCompare(b.displayName || "");
+                        }).forEach(function (v) {
+                            var opt = document.createElement("option");
+                            opt.value = v.fullName;
+                            opt.textContent = v.displayName + " — " + v.gender;
+                            optgroup.appendChild(opt);
+                        });
+                        voiceSelect.appendChild(optgroup);
+                    });
                 });
                 // Set selected
                 if (window._vlSettings && window._vlSettings.selectedVoiceLiveVoice) {
@@ -2008,6 +2100,7 @@
     document.addEventListener("change", function (e) {
         if (e.target && e.target.name === "voiceApiMode") {
             updateVoiceLiveSections(e.target.value);
+            updateActiveModeBadge(e.target.value);
         }
     });
 
@@ -2040,6 +2133,7 @@
             .then(function (saved) {
                 if (saveBtn) saveBtn.disabled = false;
                 showToast("Settings saved.");
+                updateActiveModeBadge(mode);
                 toggleSettingsOverlay();
             })
             .catch(function (err) {
@@ -2048,4 +2142,904 @@
                 console.error("Error saving settings:", err);
             });
     };
+
+    // ═══════════════════════════════════════════════════════════
+    // CENTER PANEL VIEW SWITCHING
+    // ═══════════════════════════════════════════════════════════
+
+    window.switchCenterView = function (viewName) {
+        // Hide all center views
+        var views = ["centerIdle", "activeCallArea", "callDetailPanel", "callDetailLoading",
+            "kbManagerView", "intentLibraryView", "qualityDashboardView",
+            "agentActivityView", "knowledgeGapsView", "casesListView", "caseDetailView"];
+        views.forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) el.classList.add("d-none");
+        });
+
+        // Update nav pills
+        document.querySelectorAll(".center-nav-pill").forEach(function (btn) {
+            btn.classList.remove("active");
+        });
+        var activeBtn = document.querySelector('.center-nav-pill[data-view="' + viewName + '"]');
+        // For caseDetailView, highlight the Cases pill
+        if (!activeBtn && viewName === "caseDetailView") {
+            activeBtn = document.querySelector('.center-nav-pill[data-view="casesListView"]');
+        }
+        if (activeBtn) activeBtn.classList.add("active");
+
+        if (viewName === "dashboard") {
+            // Restore dashboard: show idle or active call
+            document.querySelector('.center-nav-pill[data-view="dashboard"]').classList.add("active");
+            var hasLiveCalls = Object.keys(calls).length > 0;
+            if (hasLiveCalls) {
+                document.getElementById("activeCallArea").classList.remove("d-none");
+            } else {
+                document.getElementById("centerIdle").classList.remove("d-none");
+            }
+        } else {
+            var viewEl = document.getElementById(viewName);
+            if (viewEl) {
+                viewEl.classList.remove("d-none");
+                // Load data on first show
+                if (viewName === "kbManagerView") { loadKBCampaignDropdown(); loadKBDocuments(); }
+                else if (viewName === "intentLibraryView") loadIntents();
+                else if (viewName === "qualityDashboardView") loadQualityDashboard();
+                else if (viewName === "agentActivityView") loadAgentActivity();
+                else if (viewName === "knowledgeGapsView") loadKnowledgeGaps();
+                else if (viewName === "casesListView") loadCenterCases();
+            }
+        }
+    };
+
+    // ═══════════════════════════════════════════════════════════
+    // KNOWLEDGE BASE MANAGER
+    // ═══════════════════════════════════════════════════════════
+
+    var kbCampaignFilter = "";
+    var kbPollingTimer = null;
+
+    window.setKBCampaignFilter = function (value) {
+        kbCampaignFilter = value;
+        loadKBDocuments();
+    };
+
+    function loadKBCampaignDropdown() {
+        var select = document.getElementById("kbCampaignSelect");
+        if (!select) return;
+        fetch(apiBaseUrl() + "/api/Campaign")
+            .then(function (r) { return r.json(); })
+            .then(function (campaigns) {
+                select.innerHTML = '<option value="">All Campaigns</option>';
+                (campaigns || []).forEach(function (c) {
+                    var opt = document.createElement("option");
+                    opt.value = c.id;
+                    opt.textContent = c.title;
+                    select.appendChild(opt);
+                });
+            })
+            .catch(function () { /* ignore */ });
+    }
+
+    function loadKBDocuments() {
+        var listEl = document.getElementById("kbDocumentList");
+        listEl.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div> Loading...</div>';
+        var url = apiBaseUrl() + "/api/knowledgebase";
+        if (kbCampaignFilter) url += "?campaignId=" + encodeURIComponent(kbCampaignFilter);
+        fetch(url)
+            .then(function (r) { return r.json(); })
+            .then(function (docs) {
+                if (!docs || docs.length === 0) {
+                    listEl.innerHTML = '<div class="text-center py-3 text-muted small">No documents uploaded yet.</div>';
+                    stopKBPolling();
+                    return;
+                }
+                var hasProcessing = false;
+                listEl.innerHTML = "";
+                docs.forEach(function (doc) {
+                    var statusClass = doc.status === "Indexed" ? "text-success" : doc.status === "Failed" ? "text-danger" : "text-warning";
+                    var statusIcon = doc.status === "Indexed" ? "✓" : doc.status === "Failed" ? "✗" : "";
+                    var progressText = "";
+                    if (doc.status === "Processing" || doc.status === "Uploading") {
+                        hasProcessing = true;
+                        statusIcon = '<span class="spinner-border spinner-border-sm"></span>';
+                        if (doc.processingProgress) {
+                            progressText = '<div class="text-warning small">' + escapeHtml(doc.processingProgress) + '</div>';
+                        }
+                        var est = estimateProcessingTime(doc.fileSizeBytes);
+                        progressText += '<div class="text-muted small">Estimated: ~' + est + '</div>';
+                    }
+                    var campaignLabel = doc.campaignId ? '<span class="badge bg-info ms-1" title="Campaign-specific">Campaign</span>' : '';
+                    var card = document.createElement("div");
+                    card.className = "document-card";
+                    card.innerHTML = '<div class="d-flex justify-content-between align-items-center">' +
+                        '<div><strong>' + escapeHtml(doc.fileName) + '</strong>' +
+                        '<span class="badge ms-2 ' + statusClass + '">' + statusIcon + ' ' + doc.status + '</span>' + campaignLabel + '</div>' +
+                        '<div class="d-flex gap-1">' +
+                        (doc.status === "Failed" ? '<button class="btn btn-sm btn-outline-warning" onclick="retryDocument(\'' + doc.id + '\')">Retry</button>' : '') +
+                        '<button class="btn btn-sm btn-outline-danger" onclick="deleteDocument(\'' + doc.id + '\')">Delete</button></div></div>' +
+                        progressText +
+                        '<div class="text-muted small">' + doc.fileType + ' · ' + formatBytes(doc.fileSizeBytes) +
+                        (doc.chunkCount > 0 ? ' · ' + doc.chunkCount + ' chunks' : '') + '</div>';
+                    listEl.appendChild(card);
+                });
+                if (hasProcessing) { startKBPolling(); } else { stopKBPolling(); }
+            })
+            .catch(function () {
+                listEl.innerHTML = '<div class="text-center py-3 text-danger small">Failed to load documents.</div>';
+            });
+    }
+
+    function estimateProcessingTime(fileSizeBytes) {
+        var mb = fileSizeBytes / (1024 * 1024);
+        if (mb < 1) return "30s";
+        if (mb < 10) return "1 min";
+        return "2 min";
+    }
+
+    function startKBPolling() {
+        if (kbPollingTimer) return;
+        kbPollingTimer = setInterval(function () { loadKBDocuments(); }, 3000);
+    }
+
+    function stopKBPolling() {
+        if (kbPollingTimer) { clearInterval(kbPollingTimer); kbPollingTimer = null; }
+    }
+
+    function formatBytes(bytes) {
+        if (bytes === 0) return "0 B";
+        var k = 1024, sizes = ["B", "KB", "MB", "GB"];
+        var i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+    }
+
+    window.deleteDocument = function (id) {
+        if (!confirm("Delete this document?")) return;
+        fetch(apiBaseUrl() + "/api/knowledgebase/" + id, { method: "DELETE" })
+            .then(function () { loadKBDocuments(); });
+    };
+
+    window.retryDocument = function (id) {
+        fetch(apiBaseUrl() + "/api/knowledgebase/" + id + "/retry", { method: "POST" })
+            .then(function () { loadKBDocuments(); });
+    };
+
+    // File upload via button
+    document.getElementById("kbFileUpload").addEventListener("change", function (e) {
+        var files = e.target.files;
+        if (!files.length) return;
+        uploadKBFiles(files);
+        e.target.value = "";
+    });
+
+    // Drag and drop
+    var dropZone = document.getElementById("kbDropZone");
+    var kbManagerView = document.getElementById("kbManagerView");
+    if (kbManagerView) {
+        kbManagerView.addEventListener("dragover", function (e) {
+            e.preventDefault();
+            dropZone.classList.remove("d-none");
+        });
+        kbManagerView.addEventListener("dragleave", function (e) {
+            if (!kbManagerView.contains(e.relatedTarget)) dropZone.classList.add("d-none");
+        });
+        kbManagerView.addEventListener("drop", function (e) {
+            e.preventDefault();
+            dropZone.classList.add("d-none");
+            uploadKBFiles(e.dataTransfer.files);
+        });
+    }
+
+    function uploadKBFiles(files) {
+        for (var i = 0; i < files.length; i++) {
+            var formData = new FormData();
+            formData.append("file", files[i]);
+            if (kbCampaignFilter) formData.append("campaignId", kbCampaignFilter);
+            fetch(apiBaseUrl() + "/api/knowledgebase", { method: "POST", body: formData })
+                .then(function () { loadKBDocuments(); })
+                .catch(function (err) { showToast("Upload failed: " + err.message, "error"); });
+        }
+    }
+
+    // KB Search
+    var kbSearchTimer = null;
+    document.getElementById("kbSearchInput").addEventListener("input", function () {
+        var query = this.value.trim();
+        clearTimeout(kbSearchTimer);
+        if (!query) {
+            document.getElementById("kbSearchResults").classList.add("d-none");
+            document.getElementById("kbDocumentList").classList.remove("d-none");
+            return;
+        }
+        kbSearchTimer = setTimeout(function () {
+            var body = JSON.stringify({ query: query, top: 10, campaignId: kbCampaignFilter || null });
+            fetch(apiBaseUrl() + "/api/knowledgebase/search", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: body
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    var results = data.results || data || [];
+                    var resultsEl = document.getElementById("kbSearchResultsList");
+                    document.getElementById("kbDocumentList").classList.add("d-none");
+                    document.getElementById("kbSearchResults").classList.remove("d-none");
+                    if (results.length === 0) {
+                        resultsEl.innerHTML = '<div class="text-muted small p-2">No results found.</div>';
+                        return;
+                    }
+                    resultsEl.innerHTML = "";
+                    results.forEach(function (r) {
+                        var div = document.createElement("div");
+                        div.className = "search-result-card";
+                        div.innerHTML = '<div class="fw-bold small">' + escapeHtml(r.documentTitle || "Untitled") + '</div>' +
+                            '<div class="text-muted small">' + escapeHtml((r.content || "").substring(0, 200)) + '</div>';
+                        resultsEl.appendChild(div);
+                    });
+                });
+        }, 300);
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // INTENT LIBRARY
+    // ═══════════════════════════════════════════════════════════
+
+    var selectedIntentIds = [];
+
+    function loadIntents() {
+        var listEl = document.getElementById("intentList");
+        listEl.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div> Loading...</div>';
+        var statusFilter = document.getElementById("intentStatusFilter");
+        var status = statusFilter ? statusFilter.value : "";
+        var url = apiBaseUrl() + "/api/intent?limit=100";
+        if (status) url += "&status=" + status;
+        fetch(url)
+            .then(function (r) {
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                return r.json();
+            })
+            .then(function (intents) {
+                if (!intents || intents.length === 0) {
+                    listEl.innerHTML = '<div class="text-center py-3 text-muted small">No intents found. Use "Discover Intents" to analyze call transcripts.</div>';
+                    return;
+                }
+                selectedIntentIds = [];
+                updateIntentBulkBar();
+                listEl.innerHTML = "";
+                intents.forEach(function (intent) {
+                    var statusBadge = intent.status === "Approved" ? "bg-success" : intent.status === "Discarded" ? "bg-secondary" : "bg-info";
+                    var row = document.createElement("div");
+                    row.className = "intent-row";
+                    row.innerHTML = '<div class="d-flex align-items-center gap-2">' +
+                        '<input type="checkbox" class="intent-checkbox" data-id="' + intent.id + '">' +
+                        '<div class="flex-grow-1">' +
+                        '<div class="fw-bold small">' + escapeHtml(intent.name) + '</div>' +
+                        '<div class="text-muted small">' + escapeHtml(intent.description || "") + '</div>' +
+                        '<div class="small"><span class="badge ' + statusBadge + '">' + intent.status + '</span>' +
+                        ' <span class="text-muted">Category: ' + escapeHtml(intent.category || "General") + '</span></div></div></div>';
+                    listEl.appendChild(row);
+                });
+                // Wire checkboxes
+                document.querySelectorAll(".intent-checkbox").forEach(function (cb) {
+                    cb.addEventListener("change", function () {
+                        var id = this.getAttribute("data-id");
+                        if (this.checked) { selectedIntentIds.push(id); }
+                        else { selectedIntentIds = selectedIntentIds.filter(function (x) { return x !== id; }); }
+                        updateIntentBulkBar();
+                    });
+                });
+            })
+            .catch(function (err) {
+                console.error("Failed to load intents:", err);
+                listEl.innerHTML = '<div class="text-center py-3 text-danger small">Failed to load intents. Check console for details.</div>';
+            });
+    }
+
+    function updateIntentBulkBar() {
+        var bar = document.getElementById("intentBulkBar");
+        if (selectedIntentIds.length > 0) {
+            bar.classList.remove("d-none");
+            document.getElementById("intentSelectedCount").textContent = selectedIntentIds.length + " selected";
+        } else {
+            bar.classList.add("d-none");
+        }
+    }
+
+    document.getElementById("intentStatusFilter").addEventListener("change", function () { loadIntents(); });
+
+    document.getElementById("discoverIntentsBtn").addEventListener("click", function () {
+        this.disabled = true;
+        this.textContent = "Discovering...";
+        var btn = this;
+        fetch(apiBaseUrl() + "/api/intent/discover", { method: "POST" })
+            .then(function () { btn.disabled = false; btn.textContent = "Discover Intents"; showToast("Intent discovery started", "success"); })
+            .catch(function () { btn.disabled = false; btn.textContent = "Discover Intents"; showToast("Discovery failed", "error"); });
+    });
+
+    document.getElementById("bulkApproveBtn").addEventListener("click", function () {
+        fetch(apiBaseUrl() + "/api/intent/batch", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ids: selectedIntentIds, action: "approve" })
+        }).then(function () { loadIntents(); });
+    });
+
+    document.getElementById("bulkDiscardBtn").addEventListener("click", function () {
+        fetch(apiBaseUrl() + "/api/intent/batch", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ids: selectedIntentIds, action: "discard" })
+        }).then(function () { loadIntents(); });
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // QUALITY DASHBOARD
+    // ═══════════════════════════════════════════════════════════
+
+    function loadQualityDashboard() {
+        // Load dashboard stats
+        fetch(apiBaseUrl() + "/api/quality/dashboard")
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                document.getElementById("qAvgScore").textContent = d.averageScore != null ? d.averageScore.toFixed(1) : "—";
+                document.getElementById("qTotalEvals").textContent = d.totalEvaluations || "0";
+                document.getElementById("qFlagged").textContent = d.flaggedCount || "0";
+                document.getElementById("qPassRate").textContent = d.totalEvaluations > 0 ? Math.round(((d.totalEvaluations - (d.flaggedCount || 0)) / d.totalEvaluations) * 100) + "%" : "—";
+            })
+            .catch(function () {});
+
+        // Load evaluations
+        var listEl = document.getElementById("qualityEvalList");
+        listEl.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div> Loading...</div>';
+        fetch(apiBaseUrl() + "/api/quality?limit=50")
+            .then(function (r) { return r.json(); })
+            .then(function (evals) {
+                if (!evals || evals.length === 0) {
+                    listEl.innerHTML = '<div class="text-center py-3 text-muted small">No evaluations yet. Quality evaluations are created automatically after calls.</div>';
+                    return;
+                }
+                listEl.innerHTML = "";
+                evals.forEach(function (ev) {
+                    var scoreClass = ev.overallScore >= 4 ? "text-success" : ev.overallScore >= 3 ? "text-warning" : "text-danger";
+                    var card = document.createElement("div");
+                    card.className = "eval-card" + (ev.flagged ? " flagged" : "");
+                    card.style.cursor = "pointer";
+                    card.onclick = function () { showEvalDetail(ev.callRecordId); };
+                    card.innerHTML = '<div class="d-flex justify-content-between">' +
+                        '<div><span class="fw-bold ' + scoreClass + '">' + (ev.overallScore || 0).toFixed(1) + '</span>/5' +
+                        (ev.flagged ? ' <span class="badge bg-danger">Flagged</span>' : '') + '</div>' +
+                        '<div class="text-muted small">' + new Date(ev.evaluatedAt).toLocaleDateString() + '</div></div>' +
+                        '<div class="text-muted small">Call: ' + (ev.callRecordId || "Unknown").substring(0, 8) + '... <span class="text-info" style="font-size:0.7rem;">Click for details</span></div>';
+                    listEl.appendChild(card);
+                });
+            })
+            .catch(function () {
+                listEl.innerHTML = '<div class="text-center py-3 text-danger small">Failed to load evaluations.</div>';
+            });
+    }
+
+    document.getElementById("qualityPeriod").addEventListener("change", function () { loadQualityDashboard(); });
+
+    // ─── Quality Eval Detail View ────────────────────────────
+    function showEvalDetail(callRecordId) {
+        var detailEl = document.getElementById("qualityEvalDetail");
+        var listEl = document.getElementById("qualityEvalList");
+        var statsEl = document.getElementById("qualityStatsGrid");
+        if (!detailEl) return;
+
+        listEl.classList.add("d-none");
+        statsEl.classList.add("d-none");
+        detailEl.classList.remove("d-none");
+        document.getElementById("evalCriteriaList").innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div> Loading details...</div>';
+
+        fetch(apiBaseUrl() + "/api/quality/" + encodeURIComponent(callRecordId))
+            .then(function (r) {
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                return r.json();
+            })
+            .then(function (ev) {
+                // Overall score
+                var score = ev.overallScore || 0;
+                var scoreClass = score >= 4 ? "score-good" : score >= 3 ? "score-ok" : "score-bad";
+                document.getElementById("evalDetailTitle").innerHTML =
+                    '<button onclick="closeEvalDetail()" class="btn btn-sm btn-outline-secondary me-2">&larr; Back</button>' +
+                    'Evaluation Detail';
+                document.getElementById("evalDetailSummary").innerHTML =
+                    '<div class="d-flex align-items-center gap-3">' +
+                    '<div class="eval-detail-score ' + scoreClass + '">' + score.toFixed(1) + '</div>' +
+                    '<div><div style="font-size:0.85rem;color:#c9d1d9;">Overall Score / 5.0</div>' +
+                    '<div class="eval-detail-meta">Call: ' + (ev.callRecordId || "Unknown").substring(0, 12) + '...' +
+                    (ev.flagged ? ' &bull; <span class="text-danger">Flagged</span>' : '') +
+                    ' &bull; ' + new Date(ev.evaluatedAt).toLocaleString() + '</div></div></div>';
+
+                // Criteria list
+                var criteriaEl = document.getElementById("evalCriteriaList");
+                if (!ev.criterionScores || ev.criterionScores.length === 0) {
+                    criteriaEl.innerHTML = '<div class="text-muted small">No criterion scores available.</div>';
+                    return;
+                }
+                criteriaEl.innerHTML = "";
+                ev.criterionScores.forEach(function (cs) {
+                    var s = cs.score || 0;
+                    var cls = s >= 4 ? "good" : s >= 3 ? "ok" : "bad";
+                    var pct = Math.min((s / 5) * 100, 100);
+                    var card = document.createElement("div");
+                    card.className = "criterion-card criterion-" + cls;
+                    card.innerHTML =
+                        '<div class="criterion-header">' +
+                        '<span class="criterion-name">' + (cs.criterionName || "Unknown") + '</span>' +
+                        '<span class="criterion-score-badge score-' + cls + '">' + s.toFixed(1) + '/5</span></div>' +
+                        '<div class="criterion-bar"><div class="criterion-bar-fill bar-' + cls + '" style="width:' + pct + '%"></div></div>' +
+                        '<div class="criterion-justification">' + (cs.justification || "No justification provided.") + '</div>';
+                    criteriaEl.appendChild(card);
+                });
+            })
+            .catch(function (err) {
+                document.getElementById("evalCriteriaList").innerHTML = '<div class="text-danger small">Failed to load details: ' + err.message + '</div>';
+            });
+    }
+
+    window.closeEvalDetail = function () {
+        document.getElementById("qualityEvalDetail").classList.add("d-none");
+        document.getElementById("qualityEvalList").classList.remove("d-none");
+        document.getElementById("qualityStatsGrid").classList.remove("d-none");
+    };
+
+    // Criteria editor
+    document.getElementById("editCriteriaBtn").addEventListener("click", function () {
+        document.getElementById("criteriaEditor").classList.remove("d-none");
+        document.getElementById("qualityStatsGrid").classList.add("d-none");
+        document.getElementById("qualityEvalList").classList.add("d-none");
+        fetch(apiBaseUrl() + "/api/quality/criteria")
+            .then(function (r) { return r.json(); })
+            .then(function (criteria) {
+                var listEl = document.getElementById("criteriaList");
+                listEl.innerHTML = "";
+                criteria.forEach(function (c, i) {
+                    listEl.innerHTML += '<div class="criteria-item mb-2 p-2 border rounded">' +
+                        '<input class="form-control form-control-sm mb-1 criteria-name" value="' + escapeHtml(c.name) + '" placeholder="Criterion name">' +
+                        '<input class="form-control form-control-sm mb-1 criteria-desc" value="' + escapeHtml(c.description) + '" placeholder="Description">' +
+                        '<div class="d-flex gap-2"><input type="number" class="form-control form-control-sm criteria-weight" value="' + c.weight + '" min="1" max="10" placeholder="Weight">' +
+                        '<input type="number" class="form-control form-control-sm criteria-min" value="' + c.minimumPassingScore + '" min="1" max="5" step="0.5" placeholder="Min score"></div></div>';
+                });
+            });
+    });
+
+    document.getElementById("closeCriteriaBtn").addEventListener("click", function () {
+        document.getElementById("criteriaEditor").classList.add("d-none");
+        document.getElementById("qualityStatsGrid").classList.remove("d-none");
+        document.getElementById("qualityEvalList").classList.remove("d-none");
+    });
+
+    document.getElementById("saveCriteriaBtn").addEventListener("click", function () {
+        var criteria = [];
+        document.querySelectorAll(".criteria-item").forEach(function (item) {
+            criteria.push({
+                name: item.querySelector(".criteria-name").value,
+                description: item.querySelector(".criteria-desc").value,
+                weight: parseInt(item.querySelector(".criteria-weight").value) || 5,
+                minimumPassingScore: parseFloat(item.querySelector(".criteria-min").value) || 3
+            });
+        });
+        fetch(apiBaseUrl() + "/api/quality/criteria", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(criteria)
+        }).then(function () {
+            document.getElementById("closeCriteriaBtn").click();
+            showToast("Criteria saved", "success");
+        });
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // AGENT ACTIVITY
+    // ═══════════════════════════════════════════════════════════
+
+    window.loadAgentActivity = function () {
+        var listEl = document.getElementById("agentActivityList");
+        listEl.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div> Loading...</div>';
+        var agentType = document.getElementById("agentTypeFilter").value;
+        var url = apiBaseUrl() + "/api/agentactivity?limit=100";
+        if (agentType) url += "&agentType=" + agentType;
+        fetch(url)
+            .then(function (r) { return r.json(); })
+            .then(function (activities) {
+                if (!activities || activities.length === 0) {
+                    listEl.innerHTML = '<div class="text-center py-3 text-muted small">No agent activity recorded yet.</div>';
+                    document.getElementById("agentTotalActions").textContent = "0";
+                    return;
+                }
+                document.getElementById("agentTotalActions").textContent = activities.length;
+                var failures = activities.filter(function (a) { return a.result === "Failure" || a.result === 2; }).length;
+                document.getElementById("agentFailures").textContent = failures;
+                document.getElementById("agentSuccessRate").textContent = Math.round(((activities.length - failures) / activities.length) * 100) + "%";
+                listEl.innerHTML = "";
+                activities.forEach(function (a) {
+                    var resultClass = (a.result === "Success" || a.result === 0) ? "text-success" : (a.result === "Failure" || a.result === 2) ? "text-danger" : "text-warning";
+                    var resultLabel = (a.result === 0 || a.result === "Success") ? "Success" : (a.result === 2 || a.result === "Failure") ? "Failure" : "Partial";
+                    var card = document.createElement("div");
+                    card.className = "activity-card";
+                    card.innerHTML = '<div class="d-flex justify-content-between">' +
+                        '<div><strong class="small">' + escapeHtml(a.agentType || a.agentName || "Agent") + '</strong>' +
+                        ' <span class="' + resultClass + ' small">' + resultLabel + '</span></div>' +
+                        '<div class="text-muted small">' + new Date(a.timestamp || a.executedAt).toLocaleTimeString() + '</div></div>' +
+                        '<div class="text-muted small">' + escapeHtml(a.action || a.actionDescription || "") + '</div>' +
+                        (a.errorMessage ? '<div class="text-danger small">' + escapeHtml(a.errorMessage) + '</div>' : '');
+                    listEl.appendChild(card);
+                });
+            })
+            .catch(function () {
+                listEl.innerHTML = '<div class="text-center py-3 text-danger small">Failed to load agent activity.</div>';
+            });
+    };
+
+    document.getElementById("agentTypeFilter").addEventListener("change", function () { loadAgentActivity(); });
+
+    // ─── Live Agent Processing Handler ───────────────────────
+    var processingFirstEvent = true;
+
+    function handleAgentProcessingUpdate(data) {
+        var card = document.getElementById("agentProcessingCard");
+        if (!card) return;
+
+        // On first event, switch to Agent Activity view and show card
+        if (processingFirstEvent && data.status !== "complete") {
+            processingFirstEvent = false;
+            switchCenterView("agentActivityView");
+            card.classList.remove("d-none");
+            card.classList.remove("processing-card-complete");
+            document.getElementById("processingCallId").textContent = (data.callConnectionId || "").substring(0, 12) + "...";
+            // Reset all rows
+            ["caseManagement", "qualityEvaluation", "knowledgeGapDetection", "summaryGeneration", "intentDiscovery"].forEach(function (name) {
+                var row = card.querySelector('[data-agent="' + name + '"]');
+                if (row) {
+                    row.className = "processing-agent-row";
+                    document.getElementById("icon-" + name).textContent = "⏳";
+                    document.getElementById("status-" + name).textContent = "Pending";
+                }
+            });
+        }
+
+        if (data.status === "complete") {
+            // All done
+            card.classList.add("processing-card-complete");
+            document.getElementById("processingProgressFill").style.width = "100%";
+            document.getElementById("processingProgressLabel").textContent = "Complete";
+            processingFirstEvent = true; // Reset for next call
+            // Refresh agent activity list
+            setTimeout(function () { loadAgentActivity(); }, 500);
+            // Auto-hide after 8 seconds
+            setTimeout(function () {
+                card.classList.add("d-none");
+            }, 8000);
+            return;
+        }
+
+        var agentName = data.agentName;
+        var row = card.querySelector('[data-agent="' + agentName + '"]');
+        if (!row) return;
+
+        var iconEl = document.getElementById("icon-" + agentName);
+        var statusEl = document.getElementById("status-" + agentName);
+
+        if (data.status === "processing") {
+            row.className = "processing-agent-row active";
+            iconEl.textContent = "🔄";
+            statusEl.textContent = "Processing...";
+        } else if (data.status === "success") {
+            row.className = "processing-agent-row done";
+            iconEl.textContent = "✅";
+            statusEl.textContent = "Done";
+        } else if (data.status === "failed") {
+            row.className = "processing-agent-row failed";
+            iconEl.textContent = "❌";
+            statusEl.textContent = "Failed";
+        }
+
+        // Update progress bar
+        document.getElementById("processingProgressFill").style.width = data.progress + "%";
+        document.getElementById("processingProgressLabel").textContent = data.progress + "% complete";
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // KNOWLEDGE GAPS
+    // ═══════════════════════════════════════════════════════════
+
+    function loadKnowledgeGaps() {
+        var listEl = document.getElementById("gapList");
+        listEl.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div> Loading...</div>';
+        var status = document.getElementById("gapStatusFilter").value;
+        var url = apiBaseUrl() + "/api/knowledgegap?limit=100";
+        if (status) url += "&status=" + status;
+        fetch(url)
+            .then(function (r) { return r.json(); })
+            .then(function (gaps) {
+                if (!gaps || gaps.length === 0) {
+                    listEl.innerHTML = '<div class="text-center py-3 text-muted small">No knowledge gaps detected yet.</div>';
+                    return;
+                }
+                listEl.innerHTML = "";
+                gaps.forEach(function (g) {
+                    var statusBadge = g.status === "Published" ? "bg-success" : g.status === "Dismissed" ? "bg-secondary" : g.status === "ArticleDrafted" ? "bg-info" : "bg-warning";
+                    var card = document.createElement("div");
+                    card.className = "gap-card";
+                    card.style.cursor = "pointer";
+                    card.onclick = function () { showGapDetail(g); };
+                    card.innerHTML = '<div class="d-flex justify-content-between">' +
+                        '<div class="fw-bold small">' + escapeHtml(g.topic) + '</div>' +
+                        '<span class="badge ' + statusBadge + '">' + g.status + '</span></div>' +
+                        '<div class="text-muted small">Frequency: ' + g.frequency + ' · ' + (g.sampleQuestions || []).length + ' samples</div>';
+                    listEl.appendChild(card);
+                });
+            })
+            .catch(function () {
+                listEl.innerHTML = '<div class="text-center py-3 text-danger small">Failed to load knowledge gaps.</div>';
+            });
+    }
+
+    document.getElementById("gapStatusFilter").addEventListener("change", function () { loadKnowledgeGaps(); });
+
+    function showGapDetail(gap) {
+        document.getElementById("gapList").classList.add("d-none");
+        document.getElementById("gapDetail").classList.remove("d-none");
+        document.getElementById("gapDetailTitle").textContent = gap.topic;
+        var content = document.getElementById("gapDetailContent");
+        content.innerHTML = '<div class="mb-2"><strong>Status:</strong> ' + gap.status + '</div>' +
+            '<div class="mb-2"><strong>Frequency:</strong> ' + gap.frequency + '</div>' +
+            '<div class="mb-2"><strong>Sample Questions:</strong><ul>' +
+            (gap.sampleQuestions || []).map(function (q) { return '<li class="small">' + escapeHtml(q) + '</li>'; }).join('') + '</ul></div>' +
+            (gap.suggestedTitle ? '<div class="mb-2"><strong>Suggested Title:</strong> ' + escapeHtml(gap.suggestedTitle) + '</div>' : '') +
+            (gap.suggestedArticle ? '<div class="mb-2"><strong>Draft Article:</strong><div class="border rounded p-2 small">' + escapeHtml(gap.suggestedArticle) + '</div></div>' : '') +
+            '<div class="d-flex gap-2 mt-3">' +
+            (gap.status !== "Published" && gap.status !== "Dismissed" ?
+                '<button class="btn btn-sm btn-success" onclick="publishGap(\'' + gap.id + '\')">Publish</button>' +
+                '<button class="btn btn-sm btn-outline-secondary" onclick="dismissGap(\'' + gap.id + '\')">Dismiss</button>' : '') +
+            '</div>';
+    }
+
+    window.closeGapDetail = function () {
+        document.getElementById("gapDetail").classList.add("d-none");
+        document.getElementById("gapList").classList.remove("d-none");
+    };
+
+    window.publishGap = function (id) {
+        fetch(apiBaseUrl() + "/api/knowledgegap/" + id + "/publish", { method: "POST" })
+            .then(function () { loadKnowledgeGaps(); closeGapDetail(); showToast("Gap published to KB", "success"); });
+    };
+
+    window.dismissGap = function (id) {
+        fetch(apiBaseUrl() + "/api/knowledgegap/" + id + "/dismiss", { method: "POST" })
+            .then(function () { loadKnowledgeGaps(); closeGapDetail(); });
+    };
+
+    // ═══════════════════════════════════════════════════════════
+    // CASES (Center Panel View)
+    // ═══════════════════════════════════════════════════════════
+
+    window.loadCenterCases = function () {
+        var listEl = document.getElementById("centerCasesList");
+        var filterEl = document.getElementById("casesStatusFilter");
+        var statusParam = filterEl && filterEl.value ? "&status=" + encodeURIComponent(filterEl.value) : "";
+        listEl.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div> Loading...</div>';
+        fetch(apiBaseUrl() + "/api/case?limit=100" + statusParam)
+            .then(function (r) {
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                return r.json();
+            })
+            .then(function (cases) {
+                // Update stats
+                var total = cases.length;
+                var open = cases.filter(function (c) { return c.status === "Open" || c.status === 0; }).length;
+                var resolved = cases.filter(function (c) { return c.status === "Resolved" || c.status === 2; }).length;
+                var totalEl = document.getElementById("casesTotal");
+                var openEl = document.getElementById("casesOpen");
+                var resolvedEl = document.getElementById("casesResolved");
+                if (totalEl) totalEl.textContent = total;
+                if (openEl) openEl.textContent = open;
+                if (resolvedEl) resolvedEl.textContent = resolved;
+
+                if (!cases || cases.length === 0) {
+                    listEl.innerHTML = '<div class="text-center py-4 text-muted small">No cases found.</div>';
+                    return;
+                }
+                listEl.innerHTML = "";
+                cases.forEach(function (c) {
+                    var statusLabel = typeof c.status === "number" ? ["Open", "InProgress", "Resolved", "Closed"][c.status] || c.status : c.status;
+                    var priorityLabel = typeof c.priority === "number" ? ["Low", "Medium", "High", "Critical", "Escalation"][c.priority] || c.priority : c.priority;
+                    var statusClass = statusLabel === "Open" ? "bg-primary" : statusLabel === "InProgress" ? "bg-warning text-dark" : statusLabel === "Resolved" ? "bg-success" : "bg-secondary";
+                    var priorityClass = priorityLabel === "Critical" || priorityLabel === "Escalation" ? "text-danger fw-bold" : priorityLabel === "High" ? "text-warning" : "";
+                    var card = document.createElement("div");
+                    card.className = "case-card";
+                    card.onclick = function () { showCaseDetail(c.id); };
+                    card.innerHTML = '<div class="d-flex justify-content-between align-items-start">' +
+                        '<div class="flex-grow-1">' +
+                        '<div class="fw-bold small">' + escapeHtml(c.title || "Untitled Case") + '</div>' +
+                        '<div class="text-muted small mt-1">' + escapeHtml(c.description || "").substring(0, 120) + '</div>' +
+                        (c.callerName ? '<div class="text-muted small mt-1">Caller: ' + escapeHtml(c.callerName) + '</div>' : '') +
+                        '</div>' +
+                        '<div class="d-flex flex-column align-items-end gap-1 ms-2">' +
+                        '<span class="badge ' + statusClass + '" style="font-size:0.65rem;">' + statusLabel + '</span>' +
+                        (priorityLabel ? '<span class="small ' + priorityClass + '">' + priorityLabel + '</span>' : '') +
+                        '</div></div>';
+                    listEl.appendChild(card);
+                });
+            })
+            .catch(function () {
+                listEl.innerHTML = '<div class="text-center py-3 text-danger small">Failed to load cases. Check API connection.</div>';
+            });
+    };
+
+    // Filter change triggers reload
+    var casesFilterEl = document.getElementById("casesStatusFilter");
+    if (casesFilterEl) {
+        casesFilterEl.addEventListener("change", function () { loadCenterCases(); });
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // CASES (Right Panel Tab + Detail View)
+    // ═══════════════════════════════════════════════════════════
+
+    function loadCases() {
+        var listEl = document.getElementById("casesList");
+        var loadingEl = document.getElementById("casesListLoading");
+        var emptyEl = document.getElementById("casesListEmpty");
+        loadingEl.classList.remove("d-none");
+        listEl.classList.add("d-none");
+        emptyEl.classList.add("d-none");
+        fetch(apiBaseUrl() + "/api/case?limit=50")
+            .then(function (r) { return r.json(); })
+            .then(function (cases) {
+                loadingEl.classList.add("d-none");
+                if (!cases || cases.length === 0) {
+                    emptyEl.classList.remove("d-none");
+                    return;
+                }
+                listEl.classList.remove("d-none");
+                listEl.innerHTML = "";
+                cases.forEach(function (c) {
+                    var statusDot = c.status === "Open" ? "bg-primary" : c.status === "InProgress" ? "bg-warning" : c.status === "Resolved" ? "bg-success" : "bg-secondary";
+                    var priorityBadge = c.priority === "Critical" || c.priority === "Escalation" ? "text-danger" : c.priority === "High" ? "text-warning" : "";
+                    var card = document.createElement("div");
+                    card.className = "case-card";
+                    card.style.cursor = "pointer";
+                    card.onclick = function () { showCaseDetail(c.id); };
+                    card.innerHTML = '<div class="d-flex align-items-center gap-2">' +
+                        '<span class="status-dot ' + statusDot + '"></span>' +
+                        '<div class="flex-grow-1"><div class="fw-bold small">' + escapeHtml(c.title) + '</div>' +
+                        '<div class="text-muted small">' + c.status + (c.priority ? ' · <span class="' + priorityBadge + '">' + c.priority + '</span>' : '') + '</div></div></div>';
+                    listEl.appendChild(card);
+                });
+            })
+            .catch(function () {
+                loadingEl.classList.add("d-none");
+                listEl.innerHTML = '<div class="text-center py-3 text-danger small">Failed to load cases.</div>';
+                listEl.classList.remove("d-none");
+            });
+    }
+
+    function showCaseDetail(caseId) {
+        switchCenterView("caseDetailView");
+        var content = document.getElementById("caseDetailContent");
+        content.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div> Loading...</div>';
+        fetch(apiBaseUrl() + "/api/case/" + caseId)
+            .then(function (r) { return r.json(); })
+            .then(function (c) {
+                document.getElementById("caseDetailTitle").textContent = c.title || "Case Detail";
+                content.innerHTML = '<div class="mb-3">' +
+                    '<div class="mb-2"><strong>Status:</strong> <span class="badge bg-' + (c.status === "Open" ? "primary" : c.status === "Resolved" ? "success" : "secondary") + '">' + c.status + '</span></div>' +
+                    '<div class="mb-2"><strong>Priority:</strong> ' + (c.priority || "Medium") + '</div>' +
+                    '<div class="mb-2"><strong>Description:</strong> ' + escapeHtml(c.description || "—") + '</div>' +
+                    (c.callerName ? '<div class="mb-2"><strong>Caller:</strong> ' + escapeHtml(c.callerName) + '</div>' : '') +
+                    (c.intent ? '<div class="mb-2"><strong>Intent:</strong> ' + escapeHtml(c.intent) + '</div>' : '') +
+                    '<div class="mb-2"><strong>Created:</strong> ' + new Date(c.createdAt).toLocaleString() + '</div>' +
+                    (c.resolutionSummary ? '<div class="mb-2"><strong>Resolution:</strong> ' + escapeHtml(c.resolutionSummary) + '</div>' : '') +
+                    '<div class="mb-2"><strong>Linked Calls:</strong> ' + (c.linkedCallRecords || []).length + '</div>' +
+                    '</div>' +
+                    '<div class="d-flex gap-2">' +
+                    (c.status === "Open" || c.status === "InProgress" ? '<button class="btn btn-sm btn-success" onclick="resolveCase(\'' + c.id + '\')">Resolve</button>' : '') +
+                    (c.status === "Resolved" ? '<button class="btn btn-sm btn-secondary" onclick="closeCase(\'' + c.id + '\')">Close</button>' : '') +
+                    '</div>';
+            })
+            .catch(function () {
+                content.innerHTML = '<div class="text-danger">Failed to load case.</div>';
+            });
+    }
+
+    window.closeCaseDetail = function () {
+        switchCenterView("casesListView");
+    };
+
+    window.resolveCase = function (id) {
+        var summary = prompt("Resolution summary:");
+        if (summary === null) return;
+        fetch(apiBaseUrl() + "/api/case/" + id + "/resolve", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ resolutionSummary: summary })
+        }).then(function () { showCaseDetail(id); loadCases(); });
+    };
+
+    window.closeCase = function (id) {
+        fetch(apiBaseUrl() + "/api/case/" + id + "/close", { method: "POST" })
+            .then(function () { showCaseDetail(id); loadCases(); });
+    };
+
+    // Load cases when Cases tab is shown
+    document.getElementById("cases-tab").addEventListener("shown.bs.tab", function () { loadCases(); });
+
+    // ═══════════════════════════════════════════════════════════
+    // INBOUND STATUS + WEBRTC CALL LINK
+    // ═══════════════════════════════════════════════════════════
+
+    function checkInboundStatus() {
+        fetch(apiBaseUrl() + "/api/inbound/status")
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                var section = document.getElementById("inboundStatusSection");
+                if (data.configured) {
+                    section.style.display = "";
+                    document.getElementById("inboundStatusDot").className = "inbound-status-dot active";
+                    document.getElementById("inboundStatusText").textContent = "Inbound: Active";
+                } else {
+                    section.style.display = "none";
+                }
+            })
+            .catch(function () {});
+    }
+
+    function checkCallOverInternet() {
+        fetch(apiBaseUrl() + "/api/settings")
+            .then(function (r) { return r.json(); })
+            .then(function (settings) {
+                var section = document.getElementById("callLinkSection");
+                if (settings.callOverInternet) {
+                    section.style.display = "";
+                } else {
+                    section.style.display = "none";
+                }
+            })
+            .catch(function () {});
+    }
+
+    document.getElementById("generateCallLinkBtn").addEventListener("click", function () {
+        var btn = this;
+        btn.disabled = true;
+        var campaignId = (selectedCampaign || {}).id || "";
+        fetch(apiBaseUrl() + "/api/webrtc/sessions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ campaignId: campaignId })
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (session) {
+                btn.disabled = false;
+                var linkCard = document.getElementById("callLinkCard");
+                linkCard.classList.remove("d-none");
+                var url = window.location.origin + "/JoinCall?sessionId=" + session.sessionId;
+                document.getElementById("callLinkUrl").value = url;
+                document.getElementById("callLinkExpiry").textContent = "Expires: " + new Date(session.expiresAt).toLocaleString();
+            })
+            .catch(function () { btn.disabled = false; showToast("Failed to generate link", "error"); });
+    });
+
+    document.getElementById("copyCallLinkBtn").addEventListener("click", function () {
+        var urlInput = document.getElementById("callLinkUrl");
+        navigator.clipboard.writeText(urlInput.value).then(function () { showToast("Link copied!", "success"); });
+    });
+
+    // Knowledge source attribution on transcript bubbles
+    function addKBAttribution(bubble, sources) {
+        if (!sources || sources.length === 0) return;
+        var tooltip = document.createElement("span");
+        tooltip.className = "kb-attribution";
+        tooltip.title = "Sources: " + sources.map(function(s) { return s.documentTitle || s; }).join(", ");
+        tooltip.textContent = " 📄";
+        bubble.appendChild(tooltip);
+    }
+
+    // Check inbound/internet status on load
+    setTimeout(function() {
+        checkInboundStatus();
+        checkCallOverInternet();
+    }, 1000);
 })();

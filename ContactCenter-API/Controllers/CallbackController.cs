@@ -16,13 +16,15 @@ namespace ContactCenterPOC.Controllers
         private readonly ILogger<CallbackController> _logger;
         private readonly CallService _callService;
         private readonly CallHistoryService _callHistoryService;
+        private readonly OrchestrationService _orchestrationService;
         private readonly IHubContext<TranscriptHub> _hubContext;
 
-        public CallbackController(ILogger<CallbackController> logger, CallService callService, CallHistoryService callHistoryService, IHubContext<TranscriptHub> hubContext)
+        public CallbackController(ILogger<CallbackController> logger, CallService callService, CallHistoryService callHistoryService, OrchestrationService orchestrationService, IHubContext<TranscriptHub> hubContext)
         {
             _logger = logger;
             _callService = callService;
             _callHistoryService = callHistoryService;
+            _orchestrationService = orchestrationService;
             _hubContext = hubContext;
         }
 
@@ -61,6 +63,7 @@ namespace ContactCenterPOC.Controllers
                         .SendAsync("CallStatusChanged", statusUpdate);
 
                     await _callService.StartRecordingAsync(@event.ServerCallId, @event.CallConnectionId);
+                    await _callService.StartAudioEmotionAsync(@event.CallConnectionId);
                 }
                 else if (callbackEvent.Type.Contains("CreateCallFailed"))
                 {
@@ -143,6 +146,32 @@ namespace ContactCenterPOC.Controllers
                         .SendAsync("CallStatusChanged", statusUpdate);
 
                     await _callService.CleanupCall(@event.CallConnectionId);
+
+                    // Fire-and-forget: trigger PostCallReview orchestrator agent for post-call analysis
+                    var disconnectedCallId = @event.CallConnectionId;
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            // Small delay to ensure call record is fully persisted
+                            await Task.Delay(2000);
+                            var callRecord = await _callHistoryService.GetByIdAsync(disconnectedCallId);
+                            if (callRecord != null)
+                            {
+                                _logger.LogInformation("Auto-triggering post-call review for {CallConnectionId}", disconnectedCallId);
+                                await _orchestrationService.RunPostCallReviewAsync(callRecord, _hubContext);
+                                _logger.LogInformation("Post-call review completed for {CallConnectionId}", disconnectedCallId);
+                            }
+                            else
+                            {
+                                _logger.LogWarning("No call record found for auto-analysis: {CallConnectionId}", disconnectedCallId);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Auto post-call review failed for {CallConnectionId}", disconnectedCallId);
+                        }
+                    });
                 }
             }
 

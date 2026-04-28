@@ -29,13 +29,25 @@ namespace ContactCenterPOC.Services
         private readonly SettingsService? _settingsService;
         private readonly VoiceLiveConfig _voiceLiveConfig;
 
+        // Feature 003: Agentic services (optional — null if not registered)
+        private readonly SearchService? _searchService;
+        private readonly IntentDiscoveryService? _intentService;
+        private readonly CaseManagementService? _caseManagementService;
+        private readonly QualityEvaluationService? _qualityEvaluationService;
+        private readonly KnowledgeGapService? _knowledgeGapService;
+        private readonly AgentActivityService? _agentActivityService;
+
+        // Feature 004: Foundry agent orchestration + audio emotion
+        private readonly OrchestrationService? _orchestrationService;
+        private readonly AudioEmotionService? _audioEmotionService;
+
         // Thread-safe dictionaries for concurrent call handling
         private readonly ConcurrentDictionary<string, ActiveCall> _activeCalls = new();
         private readonly ConcurrentDictionary<string, AcsMediaStreamingHandler> _mediaHandlers = new();
 
         public ConcurrentDictionary<string, ActiveCall> ActiveCalls => _activeCalls;
 
-        public CallService(IConfiguration configuration, ILogger<CallService> logger, IHubContext<TranscriptHub> hubContext, CampaignService campaignService, CallHistoryService callHistoryService, VoiceLiveConfig voiceLiveConfig, SentimentAnalysisService? sentimentService = null, EmotionAnalysisService? emotionService = null, OperatorStyleAnalysisService? operatorStyleService = null, CallSummaryService? callSummaryService = null, SettingsService? settingsService = null)
+        public CallService(IConfiguration configuration, ILogger<CallService> logger, IHubContext<TranscriptHub> hubContext, CampaignService campaignService, CallHistoryService callHistoryService, VoiceLiveConfig voiceLiveConfig, SentimentAnalysisService? sentimentService = null, EmotionAnalysisService? emotionService = null, OperatorStyleAnalysisService? operatorStyleService = null, CallSummaryService? callSummaryService = null, SettingsService? settingsService = null, SearchService? searchService = null, IntentDiscoveryService? intentService = null, CaseManagementService? caseManagementService = null, QualityEvaluationService? qualityEvaluationService = null, KnowledgeGapService? knowledgeGapService = null, AgentActivityService? agentActivityService = null, OrchestrationService? orchestrationService = null, AudioEmotionService? audioEmotionService = null)
         {
             _logger = logger;
             _configuration = configuration;
@@ -48,6 +60,14 @@ namespace ContactCenterPOC.Services
             _callSummaryService = callSummaryService;
             _settingsService = settingsService;
             _voiceLiveConfig = voiceLiveConfig;
+            _searchService = searchService;
+            _intentService = intentService;
+            _caseManagementService = caseManagementService;
+            _qualityEvaluationService = qualityEvaluationService;
+            _knowledgeGapService = knowledgeGapService;
+            _agentActivityService = agentActivityService;
+            _orchestrationService = orchestrationService;
+            _audioEmotionService = audioEmotionService;
             var connectionString = configuration["AzureCommunicationServices:ConnectionString"];
             _callbackUri = configuration["CallbackUrl"] ?? throw new InvalidOperationException("CallbackUrl not configured");
             _callAutomationClient = new CallAutomationClient(connectionString);
@@ -81,6 +101,7 @@ namespace ContactCenterPOC.Services
             string effectivePrompt;
             string? resolvedCampaignId = null;
             string? resolvedCampaignTitle = null;
+            Campaign? resolvedCampaign = null;
 
             if (!string.IsNullOrWhiteSpace(callContextPrompt))
             {
@@ -90,12 +111,12 @@ namespace ContactCenterPOC.Services
             else if (!string.IsNullOrWhiteSpace(campaignId))
             {
                 // Look up campaign
-                var campaign = await _campaignService.GetByIdAsync(campaignId);
-                if (campaign != null)
+                resolvedCampaign = await _campaignService.GetByIdAsync(campaignId);
+                if (resolvedCampaign != null)
                 {
-                    effectivePrompt = campaign.AiBehaviorInstructions;
-                    resolvedCampaignId = campaign.Id;
-                    resolvedCampaignTitle = campaign.Title;
+                    effectivePrompt = resolvedCampaign.AiBehaviorInstructions;
+                    resolvedCampaignId = resolvedCampaign.Id;
+                    resolvedCampaignTitle = resolvedCampaign.Title;
                 }
                 else
                 {
@@ -108,6 +129,9 @@ namespace ContactCenterPOC.Services
                 // Default prompt fallback (FR-008)
                 effectivePrompt = _configuration["AzureOpenAI:SystemPrompt"] ?? "You are an AI assistant that helps people find information.";
             }
+
+            // Feature 003: Enrich prompt with KB context and intents
+            effectivePrompt = await EnrichPromptWithKnowledgeAsync(effectivePrompt, resolvedCampaign);
 
             var results = new List<(string callConnectionId, string phoneNumber)>();
 
@@ -421,28 +445,30 @@ namespace ContactCenterPOC.Services
 
                 await _callHistoryService.SaveCallRecordAsync(callRecord);
 
-                // Fire-and-forget: generate post-call summary in the background
-                if (_callSummaryService != null && entries.Count > 0)
+                // Audio emotion aggregation (stop and save results)
+                if (_audioEmotionService != null)
                 {
                     _ = Task.Run(async () =>
                     {
                         try
                         {
-                            var summary = await _callSummaryService.GenerateSummaryAsync(entries);
-                            if (!string.IsNullOrWhiteSpace(summary))
+                            var emotionResult = await _audioEmotionService.StopAndAggregateAsync(activeCall.CallConnectionId);
+                            if (emotionResult != null)
                             {
-                                callRecord.CallSummary = summary;
-                                callRecord.SummarizedAt = DateTimeOffset.UtcNow;
+                                callRecord.AudioEmotionResult = emotionResult;
                                 await _callHistoryService.SaveCallRecordAsync(callRecord);
-                                _logger.LogInformation("Post-call summary generated for {CallConnectionId}", activeCall.CallConnectionId);
                             }
                         }
-                        catch (Exception summaryEx)
+                        catch (Exception ex)
                         {
-                            _logger.LogWarning(summaryEx, "Failed to generate post-call summary for {CallConnectionId}", activeCall.CallConnectionId);
+                            _logger.LogWarning(ex, "Audio emotion aggregation failed for {CallConnectionId}", activeCall.CallConnectionId);
                         }
                     });
                 }
+
+                // Note: Post-call agents (case, quality, knowledge gap, summary, intent) are now
+                // triggered via RunBatchAnalysisAsync in CallbackController.CallDisconnected
+                // to avoid duplicate execution and provide live SignalR progress updates.
             }
             catch (Exception ex)
             {
@@ -475,6 +501,20 @@ namespace ContactCenterPOC.Services
             }
         }
 
+        public async Task StartAudioEmotionAsync(string callConnectionId)
+        {
+            if (_audioEmotionService == null) return;
+            try
+            {
+                await _audioEmotionService.StartAnalysisAsync(callConnectionId);
+                _logger.LogInformation("Audio emotion analysis started for {CallConnectionId}", callConnectionId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to start audio emotion analysis for {CallConnectionId}", callConnectionId);
+            }
+        }
+
         public async Task StopRecordingAsync(string recordingId)
         {
             try
@@ -484,6 +524,149 @@ namespace ContactCenterPOC.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to stop recording {RecordingId}", recordingId);
+            }
+        }
+
+        /// <summary>
+        /// Enriches a call prompt with knowledge base context and approved intents.
+        /// Called before AI session creation in InitiateCall and inbound acceptance.
+        /// </summary>
+        internal async Task<string> EnrichPromptWithKnowledgeAsync(string basePrompt, Campaign? campaign)
+        {
+            var enrichedPrompt = basePrompt;
+
+            // Inject approved intents context
+            if (_intentService != null)
+            {
+                try
+                {
+                    var intents = await _intentService.GetApprovedIntentsAsync();
+                    if (intents.Count > 0)
+                    {
+                        var intentSection = "\n\nKNOWN CUSTOMER INTENTS (use these to guide the conversation):\n";
+                        foreach (var intent in intents.Take(20))
+                        {
+                            intentSection += $"- {intent.Name}: {intent.Description}\n";
+                        }
+                        enrichedPrompt += intentSection;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to inject intent context into prompt");
+                }
+            }
+
+            // Add data restriction if configured on campaign
+            if (campaign?.RestrictToProvidedDataOnly == true)
+            {
+                enrichedPrompt += "\n\nIMPORTANT: You MUST only use information from the knowledge base documents below. If you don't know the answer, say so honestly.\n";
+            }
+
+            return enrichedPrompt;
+        }
+
+        /// <summary>
+        /// Runs post-call agent processing: case creation, quality evaluation, knowledge gap detection.
+        /// Called after call completion and history persistence.
+        /// </summary>
+        internal async Task RunPostCallAgentsAsync(ActiveCall activeCall, CallRecord callRecord)
+        {
+            // Feature 004: Route through OrchestrationService (Foundry agents with fallback)
+            if (_orchestrationService != null)
+            {
+                if (activeCall.TranscriptEntries.Count > 0)
+                {
+                    try
+                    {
+                        await _orchestrationService.ProcessCallOutcomeAsync(callRecord);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Post-call case management failed for {CallConnectionId}", activeCall.CallConnectionId);
+                    }
+                }
+
+                if (callRecord.Duration.TotalSeconds >= 10)
+                {
+                    try
+                    {
+                        await _orchestrationService.EvaluateCallAsync(callRecord);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Post-call quality evaluation failed for {CallConnectionId}", activeCall.CallConnectionId);
+                    }
+                }
+
+                if (activeCall.TranscriptEntries.Count > 0)
+                {
+                    try
+                    {
+                        await _orchestrationService.DetectKnowledgeGapsAsync(callRecord);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Post-call knowledge gap detection failed for {CallConnectionId}", activeCall.CallConnectionId);
+                    }
+                }
+
+                // Feature 004: Stop audio emotion analysis and aggregate results
+                if (_audioEmotionService != null)
+                {
+                    try
+                    {
+                        var emotionResult = await _audioEmotionService.StopAndAggregateAsync(activeCall.CallConnectionId);
+                        if (emotionResult != null)
+                        {
+                            callRecord.AudioEmotionResult = emotionResult;
+                            await _callHistoryService.SaveCallRecordAsync(callRecord);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Audio emotion aggregation failed for {CallConnectionId}", activeCall.CallConnectionId);
+                    }
+                }
+
+                return;
+            }
+
+            // Legacy path: direct service calls (no Foundry)
+            if (_caseManagementService != null && activeCall.TranscriptEntries.Count > 0)
+            {
+                try
+                {
+                    await _caseManagementService.ProcessCallOutcomeAsync(callRecord);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Post-call case management failed for {CallConnectionId}", activeCall.CallConnectionId);
+                }
+            }
+
+            if (_qualityEvaluationService != null && callRecord.Duration.TotalSeconds >= 10)
+            {
+                try
+                {
+                    await _qualityEvaluationService.EvaluateCallAsync(callRecord);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Post-call quality evaluation failed for {CallConnectionId}", activeCall.CallConnectionId);
+                }
+            }
+
+            if (_knowledgeGapService != null && activeCall.TranscriptEntries.Count > 0)
+            {
+                try
+                {
+                    await _knowledgeGapService.DetectGapsAsync(callRecord);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Post-call knowledge gap detection failed for {CallConnectionId}", activeCall.CallConnectionId);
+                }
             }
         }
     }

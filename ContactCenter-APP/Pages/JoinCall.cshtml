@@ -1,0 +1,91 @@
+@page
+@model JoinCallModel
+@{
+    ViewData["Title"] = "Join Call";
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Join Call - Contact Center</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+    <style>
+        body { background: #1a1d23; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }
+        .join-container { max-width: 480px; margin: 60px auto; padding: 2rem; }
+        .join-card { background: #23272e; border-radius: 12px; padding: 2rem; }
+        .join-title { font-size: 1.4rem; font-weight: 600; margin-bottom: 1.5rem; text-align: center; }
+        .form-label { font-size: 0.85rem; color: #aaa; }
+        .form-control { background: #2c3038; border: 1px solid #3a3f48; color: #e0e0e0; }
+        .form-control:focus { background: #2c3038; color: #e0e0e0; border-color: #5b9bd5; box-shadow: 0 0 0 2px rgba(91,155,213,0.2); }
+        .btn-join { background: #4CAF50; border: none; color: #fff; padding: 0.6rem 1.5rem; border-radius: 8px; width: 100%; font-weight: 600; }
+        .btn-join:hover { background: #45a049; }
+        .btn-join:disabled { opacity: 0.5; }
+        .call-status { text-align: center; margin-top: 1rem; }
+        .transcript-container { background: #1e2228; border-radius: 8px; padding: 1rem; margin-top: 1rem; max-height: 300px; overflow-y: auto; font-size: 0.85rem; }
+        .transcript-entry { margin-bottom: 0.5rem; padding: 0.3rem 0; border-bottom: 1px solid #2c3038; }
+        .mic-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #666; margin-right: 8px; }
+        .mic-indicator.active { background: #4CAF50; animation: pulse 1s infinite; }
+        @@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .error-msg { color: #f44336; font-size: 0.85rem; margin-top: 0.5rem; }
+        .session-expired { text-align: center; padding: 2rem; }
+        .end-call-btn { background: #f44336; border: none; color: #fff; padding: 0.5rem 1.5rem; border-radius: 8px; margin-top: 1rem; }
+    </style>
+</head>
+<body>
+    <input type="hidden" id="apiBaseUrl" value="@Model.ApiBaseUrl" />
+    <input type="hidden" id="sessionId" value="@Model.SessionId" />
+
+    <div class="join-container">
+        <div class="join-card">
+            <div class="join-title">Join Call</div>
+
+            <!-- Join Form -->
+            <div id="joinForm">
+                <div class="mb-3">
+                    <label class="form-label" for="callerName">Your Name <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="callerName" placeholder="Enter your name" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="callerEmail">Email <small class="text-muted">(optional)</small></label>
+                    <input type="email" class="form-control" id="callerEmail" placeholder="you@example.com">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="callerPhone">Phone <small class="text-muted">(optional)</small></label>
+                    <input type="tel" class="form-control" id="callerPhone" placeholder="+1234567890">
+                </div>
+                <div id="joinError" class="error-msg d-none"></div>
+                <button class="btn-join" id="joinBtn" onclick="joinCall()">
+                    Join Call
+                </button>
+            </div>
+
+            <!-- In-Call View -->
+            <div id="inCallView" class="d-none">
+                <div class="call-status">
+                    <div><span class="mic-indicator" id="micIndicator"></span><span id="callStatusText">Connecting...</span></div>
+                    <div class="mt-2 text-muted small" id="callDuration">00:00</div>
+                </div>
+                <div class="transcript-container" id="transcriptContainer">
+                    <div class="text-muted small text-center">Waiting for conversation...</div>
+                </div>
+                <div class="text-center">
+                    <button class="end-call-btn" id="endCallBtn" onclick="endCall()">End Call</button>
+                </div>
+            </div>
+
+            <!-- Session Expired View -->
+            <div id="expiredView" class="d-none">
+                <div class="session-expired">
+                    <h5>Session Unavailable</h5>
+                    <p class="text-muted">This call link has expired or has already been used.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="~/js/signalr.min.js"></script>
+    <script src="~/js/webrtc.js"></script>
+</body>
+</html>

@@ -30,5 +30,8 @@ namespace ContactCenterPOC.Models
         public string? VoiceLiveModel { get; set; }
         public string? VoiceLiveVoice { get; set; }
         public int ReconnectAttempts { get; set; } = 0;
+
+        // Feature 003: call source tracking
+        public string CallSource { get; set; } = "Phone";  // "Phone", "Inbound", or "Internet"
     }
 }

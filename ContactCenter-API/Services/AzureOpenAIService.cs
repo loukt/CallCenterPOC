@@ -4,9 +4,11 @@ using Azure.Identity;
 using ContactCenterPOC.Hubs;
 using ContactCenterPOC.Models;
 using Microsoft.AspNetCore.SignalR;
-using OpenAI.RealtimeConversation;
+using OpenAI.Realtime;
 using System.ClientModel;
 using System.Collections.Concurrent;
+
+#pragma warning disable OPENAI002
 
 
 namespace ContactCenterPOC.Services
@@ -14,7 +16,7 @@ namespace ContactCenterPOC.Services
     public class AzureOpenAIService
     {
         private CancellationTokenSource m_cts;
-        private RealtimeConversationSession m_aiSession;
+        private RealtimeSessionClient m_aiSession;
         private AcsMediaStreamingHandler m_mediaStreaming;
         private MemoryStream m_memoryStream;
         private ILogger<CallService> _logger;
@@ -106,7 +108,7 @@ namespace ContactCenterPOC.Services
 
 
 
-        private async Task<RealtimeConversationSession> CreateAISessionAsync(IConfiguration configuration, string prompt)
+        private async Task<RealtimeSessionClient> CreateAISessionAsync(IConfiguration configuration, string prompt)
         {
             var openAiUri = configuration["AzureOpenAI:EndpointUri"];
             ArgumentNullException.ThrowIfNullOrEmpty(openAiUri);
@@ -130,42 +132,50 @@ namespace ContactCenterPOC.Services
             _logger.LogInformation("[AI-{CallId}] Using DefaultAzureCredential (Managed Identity / Entra ID)", _callConnectionId);
 
             var aiClient = new AzureOpenAIClient(new Uri(openAiUri), credential);
-            var realtimeClient = aiClient.GetRealtimeConversationClient(openAiModelName);
+            var realtimeClient = aiClient.GetRealtimeClient();
             
             _logger.LogInformation("[AI-{CallId}] Starting conversation session...", _callConnectionId);
-            var session = await realtimeClient.StartConversationSessionAsync();
-            _logger.LogInformation("[AI-{CallId}] Conversation session started, configuring...", _callConnectionId);
 
             // Session options control connection-wide behavior shared across all conversations,
             // including audio input format and voice activity detection settings.
-            ConversationSessionOptions sessionOptions = new()
+            RealtimeConversationSessionOptions sessionOptions = new()
             {
                 Instructions = systemPrompt,
-                Voice = MapVoice(_selectedVoice),
-                InputAudioFormat = ConversationAudioFormat.Pcm16,
-                OutputAudioFormat = ConversationAudioFormat.Pcm16,
-                InputTranscriptionOptions = new()
+                AudioOptions = new()
                 {
-                    Model = "whisper-1",
+                    InputAudioOptions = new()
+                    {
+                        AudioFormat = new RealtimePcmAudioFormat(),
+                        AudioTranscriptionOptions = new()
+                        {
+                            Model = "whisper-1",
+                        },
+                        TurnDetection = new RealtimeServerVadTurnDetection(),
+                    },
+                    OutputAudioOptions = new()
+                    {
+                        AudioFormat = new RealtimePcmAudioFormat(),
+                        Voice = MapVoice(_selectedVoice),
+                    },
                 },
-                TurnDetectionOptions = ConversationTurnDetectionOptions.CreateServerVoiceActivityTurnDetectionOptions(0.5f, TimeSpan.FromMilliseconds(500), TimeSpan.FromMilliseconds(500)),
             };
 
-            await session.ConfigureSessionAsync(sessionOptions);
+            var sessionClient = await realtimeClient.StartConversationSessionAsync(openAiModelName);
+            await sessionClient.ConfigureConversationSessionAsync(sessionOptions);
             _logger.LogInformation("[AI-{CallId}] Session configured (voice={Voice}, format=PCM16, VAD enabled)", _callConnectionId, _selectedVoice);
-            return session;
+            return sessionClient;
         }
 
-        private static ConversationVoice MapVoice(string voiceName)
+        private static RealtimeVoice MapVoice(string voiceName)
         {
             return voiceName?.ToLowerInvariant() switch
             {
-                "echo" => ConversationVoice.Echo,
-                "fable" => new ConversationVoice("fable"),
-                "onyx" => new ConversationVoice("onyx"),
-                "nova" => new ConversationVoice("nova"),
-                "shimmer" => ConversationVoice.Shimmer,
-                _ => ConversationVoice.Alloy
+                "echo" => RealtimeVoice.Echo,
+                "fable" => new RealtimeVoice("fable"),
+                "onyx" => new RealtimeVoice("onyx"),
+                "nova" => new RealtimeVoice("nova"),
+                "shimmer" => RealtimeVoice.Shimmer,
+                _ => RealtimeVoice.Alloy
             };
         }
 
@@ -179,14 +189,14 @@ namespace ContactCenterPOC.Services
                 _logger.LogInformation("[AI-{CallId}] Listening for AI updates...", _callConnectionId);
                 int audioChunkCount = 0;
                 
-                await foreach (ConversationUpdate update in m_aiSession.ReceiveUpdatesAsync(m_cts.Token))
+                await foreach (RealtimeServerUpdate update in m_aiSession.ReceiveUpdatesAsync())
                 {
-                    if (update is ConversationSessionStartedUpdate sessionStartedUpdate)
+                    if (update is RealtimeServerUpdateSessionCreated sessionStartedUpdate)
                     {
-                        _logger.LogInformation("[AI-{CallId}] Session started. ID: {SessionId}", _callConnectionId, sessionStartedUpdate.SessionId);
+                        _logger.LogInformation("[AI-{CallId}] Session started", _callConnectionId);
                     }
 
-                    if (update is ConversationInputSpeechStartedUpdate speechStartedUpdate)
+                    if (update is RealtimeServerUpdateInputAudioBufferSpeechStarted speechStartedUpdate)
                     {
                         _logger.LogInformation("[AI-{CallId}] Voice activity detection started at {AudioStartTime} ms", _callConnectionId, speechStartedUpdate.AudioStartTime);
                         // Barge-in, send stop audio
@@ -194,19 +204,19 @@ namespace ContactCenterPOC.Services
                         await m_mediaStreaming.SendMessageAsync(jsonString);
                     }
 
-                    if (update is ConversationInputSpeechFinishedUpdate speechFinishedUpdate)
+                    if (update is RealtimeServerUpdateInputAudioBufferSpeechStopped speechFinishedUpdate)
                     {
                         _logger.LogInformation("[AI-{CallId}] Voice activity detection ended at {AudioEndTime} ms", _callConnectionId, speechFinishedUpdate.AudioEndTime);
                     }
 
-                    if (update is ConversationItemStreamingStartedUpdate itemStartedUpdate)
+                    if (update is RealtimeServerUpdateResponseOutputItemAdded itemStartedUpdate)
                     {
                         _logger.LogInformation("[AI-{CallId}] Begin streaming of new item", _callConnectionId);
                     }
 
                     // Audio transcript updates contain the incremental text matching the generated
                     // output audio.
-                    if (update is ConversationItemStreamingAudioTranscriptionFinishedUpdate outputTranscriptDeltaUpdate)
+                    if (update is RealtimeServerUpdateResponseOutputAudioTranscriptDone outputTranscriptDeltaUpdate)
                     {
                         _logger.LogInformation("[AI-{CallId}] AI transcript: {Transcript}", _callConnectionId, outputTranscriptDeltaUpdate.Transcript);
                         var aiEntry = new TranscriptEntry
@@ -234,31 +244,31 @@ namespace ContactCenterPOC.Services
 
                     // Audio delta updates contain the incremental binary audio data of the generated output
                     // audio, matching the output audio format configured for the session.
-                    if (update is ConversationItemStreamingPartDeltaUpdate deltaUpdate)
+                    if (update is RealtimeServerUpdateResponseOutputAudioDelta deltaUpdate)
                     {
-                        if (deltaUpdate.AudioBytes != null)
+                        if (deltaUpdate.Delta != null && deltaUpdate.Delta.Length > 0)
                         {
                             audioChunkCount++;
                             if (audioChunkCount <= 3 || audioChunkCount % 50 == 0)
                             {
                                 _logger.LogInformation("[AI-{CallId}] Sending audio chunk #{ChunkNum} ({ByteCount} bytes) to ACS", 
-                                    _callConnectionId, audioChunkCount, deltaUpdate.AudioBytes.ToArray().Length);
+                                    _callConnectionId, audioChunkCount, deltaUpdate.Delta.Length);
                             }
-                            var jsonString = OutStreamingData.GetAudioDataForOutbound(deltaUpdate.AudioBytes.ToArray());
+                            var jsonString = OutStreamingData.GetAudioDataForOutbound(deltaUpdate.Delta.ToArray());
                             await m_mediaStreaming.SendMessageAsync(jsonString);
                         }
                         else
                         {
-                            _logger.LogWarning("[AI-{CallId}] Received delta update but AudioBytes is null", _callConnectionId);
+                            _logger.LogWarning("[AI-{CallId}] Received delta update but Delta is empty", _callConnectionId);
                         }
                     }
 
-                    if (update is ConversationItemStreamingTextFinishedUpdate itemFinishedUpdate)
+                    if (update is RealtimeServerUpdateResponseOutputTextDone itemFinishedUpdate)
                     {
                         _logger.LogInformation("[AI-{CallId}] Item streaming finished, response_id={ResponseId}", _callConnectionId, itemFinishedUpdate.ResponseId);
                     }
 
-                    if (update is ConversationInputTranscriptionFinishedUpdate transcriptionCompletedUpdate)
+                    if (update is RealtimeServerUpdateConversationItemInputAudioTranscriptionCompleted transcriptionCompletedUpdate)
                     {
                         _logger.LogInformation("[AI-{CallId}] User audio transcript: {Transcript}", _callConnectionId, transcriptionCompletedUpdate.Transcript);
                         var recipientEntry = new TranscriptEntry
@@ -284,15 +294,15 @@ namespace ContactCenterPOC.Services
                         FireAndForgetEmotion(recipientEntry);
                     }
 
-                    if (update is ConversationResponseFinishedUpdate turnFinishedUpdate)
+                    if (update is RealtimeServerUpdateResponseDone turnFinishedUpdate)
                     {
                         _logger.LogInformation("[AI-{CallId}] Model turn generation finished. Status: {Status}. Total audio chunks sent: {ChunkCount}", 
-                            _callConnectionId, turnFinishedUpdate.Status, audioChunkCount);
+                            _callConnectionId, turnFinishedUpdate.Response?.Status, audioChunkCount);
                     }
 
-                    if (update is ConversationErrorUpdate errorUpdate)
+                    if (update is RealtimeServerUpdateError errorUpdate)
                     {
-                        _logger.LogError("[AI-{CallId}] OpenAI Realtime error: {ErrorMessage}", _callConnectionId, errorUpdate.Message);
+                        _logger.LogError("[AI-{CallId}] OpenAI Realtime error: {ErrorMessage}", _callConnectionId, errorUpdate.Error?.Message);
                         if (_hangUpCallback != null)
                         {
                             await _hangUpCallback(_callConnectionId);

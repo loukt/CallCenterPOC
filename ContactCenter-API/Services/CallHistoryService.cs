@@ -153,6 +153,62 @@ namespace ContactCenterPOC.Services
             }
         }
 
+        public async Task<List<CallRecord>> GetByDateRangeAsync(DateTimeOffset from, DateTimeOffset to)
+        {
+            await EnsureCacheLoadedAsync();
+
+            List<string> matchingIds;
+            await _cacheLock.WaitAsync();
+            try
+            {
+                matchingIds = _summaryCache
+                    .Where(s => s.StartedAt >= from && s.StartedAt <= to)
+                    .OrderByDescending(s => s.StartedAt)
+                    .Select(s => s.CallConnectionId)
+                    .ToList();
+            }
+            finally
+            {
+                _cacheLock.Release();
+            }
+
+            var records = new List<CallRecord>();
+            foreach (var id in matchingIds)
+            {
+                var record = await GetByIdAsync(id);
+                if (record != null) records.Add(record);
+            }
+            return records;
+        }
+
+        public async Task<List<CallRecord>> GetRecentCallRecordsAsync(int count)
+        {
+            await EnsureCacheLoadedAsync();
+
+            List<string> recentIds;
+            await _cacheLock.WaitAsync();
+            try
+            {
+                recentIds = _summaryCache
+                    .OrderByDescending(s => s.StartedAt)
+                    .Take(count)
+                    .Select(s => s.CallConnectionId)
+                    .ToList();
+            }
+            finally
+            {
+                _cacheLock.Release();
+            }
+
+            var records = new List<CallRecord>();
+            foreach (var id in recentIds)
+            {
+                var record = await GetByIdAsync(id);
+                if (record != null) records.Add(record);
+            }
+            return records;
+        }
+
         public async Task<CallRecord?> GetByIdAsync(string callConnectionId)
         {
             try

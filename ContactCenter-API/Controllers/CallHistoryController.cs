@@ -386,5 +386,18 @@ namespace ContactCenterPOC.Controllers
                 EnableRangeProcessing = true
             };
         }
+
+        [HttpGet("{callConnectionId}/audio-emotion")]
+        public async Task<IActionResult> GetAudioEmotion(string callConnectionId)
+        {
+            var callRecord = await _callHistoryService.GetByIdAsync(callConnectionId);
+            if (callRecord == null)
+                return NotFound(new { error = "Call record not found" });
+
+            if (callRecord.AudioEmotionResult == null)
+                return NotFound(new { error = "Audio emotion analysis not yet available for this call" });
+
+            return Ok(callRecord.AudioEmotionResult);
+        }
     }
 }

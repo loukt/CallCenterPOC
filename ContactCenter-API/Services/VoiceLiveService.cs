@@ -92,18 +92,34 @@ namespace ContactCenterPOC.Services
             _logger.LogInformation("[VL-{CallId}] Starting session with model '{Model}'...", _callConnectionId, _model);
             var session = await client.StartSessionAsync(_model);
 
-            // Configure session options
+            _logger.LogInformation("[VL-{CallId}] Configuring session with voice '{Voice}'",
+                _callConnectionId, _selectedVoice);
+
+            // Configure session options — use the full Azure Speech voice name as-is
+            // e.g. "en-US-Ava:DragonHDLatestNeural" or "en-US-Grant:MAI-Voice-1"
             var options = new VoiceLiveSessionOptions
             {
+                Model = _model,
                 Instructions = _prompt,
                 Voice = new AzureStandardVoice(_selectedVoice),
                 InputAudioFormat = InputAudioFormat.Pcm16,
                 OutputAudioFormat = OutputAudioFormat.Pcm16,
                 InputAudioNoiseReduction = new AudioNoiseReduction(AudioNoiseReductionType.AzureDeepNoiseSuppression),
                 InputAudioEchoCancellation = new AudioEchoCancellation(),
-                TurnDetection = new AzureSemanticVadTurnDetection(),
+                TurnDetection = new AzureSemanticVadTurnDetection
+                {
+                    Threshold = 0.75f,
+                    SpeechDuration = TimeSpan.FromMilliseconds(250),
+                    InterruptResponse = false,
+                    RemoveFillerWords = true
+                },
                 InputAudioTranscription = new AudioInputTranscriptionOptions(AudioInputTranscriptionOptionsModel.Whisper1)
             };
+
+            // Modalities MUST be set explicitly for audio output (SDK defaults to text-only)
+            options.Modalities.Clear();
+            options.Modalities.Add(InteractionModality.Text);
+            options.Modalities.Add(InteractionModality.Audio);
 
             await session.ConfigureSessionAsync(options);
             _logger.LogInformation("[VL-{CallId}] Session configured (voice={Voice}, format=PCM16, echo cancel + noise reduction + semantic VAD)",

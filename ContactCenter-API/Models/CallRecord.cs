@@ -19,6 +19,7 @@ namespace ContactCenterPOC.Models
         public OperatorStyleTraits? OperatorStyleTraits { get; set; }
         public string? CallSummary { get; set; }
         public DateTimeOffset? SummarizedAt { get; set; }
+        public AudioEmotionResult? AudioEmotionResult { get; set; }
         public List<TranscriptEntry> TranscriptEntries { get; set; } = new();
         public DateTimeOffset StartedAt { get; set; }
         public DateTimeOffset EndedAt { get; set; }

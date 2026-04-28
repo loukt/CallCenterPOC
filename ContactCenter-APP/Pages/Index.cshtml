@@ -186,14 +186,47 @@
                 </button>
                 <div id="callError" class="text-danger small mt-2 d-none"></div>
             </div>
+
+            <!-- Inbound Status Indicator -->
+            <div class="form-section" id="inboundStatusSection" style="display:none;">
+              <div class="inbound-status-card">
+                <span class="inbound-status-dot" id="inboundStatusDot"></span>
+                <span class="small" id="inboundStatusText">Inbound: Checking...</span>
+              </div>
+            </div>
+
+            <!-- Generate Call Link (WebRTC) -->
+            <div class="form-section" id="callLinkSection" style="display:none;">
+              <button type="button" class="btn btn-outline-info btn-sm w-100" id="generateCallLinkBtn">
+                Generate Call Link
+              </button>
+              <div id="callLinkCard" class="call-link-card d-none mt-2">
+                <div class="d-flex align-items-center gap-2">
+                  <input type="text" class="form-control form-control-sm" id="callLinkUrl" readonly>
+                  <button class="btn btn-sm btn-outline-secondary" id="copyCallLinkBtn" title="Copy">Copy</button>
+                </div>
+                <small class="text-muted mt-1 d-block" id="callLinkExpiry"></small>
+              </div>
+            </div>
         </div>
     </aside>
 
     <!-- ═══ CENTER PANEL: Live Call Operations ═══ -->
     <section class="panel panel-center" id="panelCenter">
-        <div class="panel-header">
-            <h6 class="panel-title">Live Call Operations</h6>
-            <div class="call-tabs d-none" id="callTabs"></div>
+        <div class="panel-header panel-header-col">
+            <div class="panel-header-top">
+                <h6 class="panel-title">Live Call Operations</h6>
+                <div class="call-tabs d-none" id="callTabs"></div>
+            </div>
+            <div class="center-nav">
+              <button class="center-nav-pill active" data-view="dashboard" onclick="switchCenterView('dashboard')">Dashboard</button>
+              <button class="center-nav-pill" data-view="kbManagerView" onclick="switchCenterView('kbManagerView')">Knowledge Base</button>
+              <button class="center-nav-pill" data-view="intentLibraryView" onclick="switchCenterView('intentLibraryView')">Intents</button>
+              <button class="center-nav-pill" data-view="casesListView" onclick="switchCenterView('casesListView')">Cases</button>
+              <button class="center-nav-pill" data-view="qualityDashboardView" onclick="switchCenterView('qualityDashboardView')">Quality</button>
+              <button class="center-nav-pill" data-view="knowledgeGapsView" onclick="switchCenterView('knowledgeGapsView')">Knowledge Gaps</button>
+              <button class="center-nav-pill" data-view="agentActivityView" onclick="switchCenterView('agentActivityView')">Agent Activity</button>
+            </div>
         </div>
         <div class="panel-body" id="centerPanelBody">
             <!-- Idle State -->
@@ -206,6 +239,15 @@
                 <h3 class="idle-title">Ready to Make Calls</h3>
                 <p class="idle-subtext">Select a campaign and enter a phone number to begin</p>
 
+                <!-- KPI Time Range Selector -->
+                <div class="kpi-range-bar mb-2">
+                    <button class="kpi-range-pill active" data-range="today" onclick="setKpiTimeRange('today')">Today</button>
+                    <button class="kpi-range-pill" data-range="yesterday" onclick="setKpiTimeRange('yesterday')">Yesterday</button>
+                    <button class="kpi-range-pill" data-range="7d" onclick="setKpiTimeRange('7d')">Last 7 Days</button>
+                    <button class="kpi-range-pill" data-range="30d" onclick="setKpiTimeRange('30d')">Last 30 Days</button>
+                    <button class="kpi-range-pill" data-range="year" onclick="setKpiTimeRange('year')">Year</button>
+                </div>
+
                 <!-- KPI Cards (idle state) -->
                 <div class="kpi-grid" id="kpiGrid">
                     <div class="kpi-card">
@@ -215,7 +257,7 @@
                             </svg>
                         </div>
                         <div class="kpi-value" id="kpiCallsToday">0</div>
-                        <div class="kpi-label">Calls Today</div>
+                        <div class="kpi-label" id="kpiCallsLabel">Calls Today</div>
                     </div>
                     <div class="kpi-card">
                         <div class="kpi-icon kpi-icon-duration">
@@ -482,6 +524,237 @@
                     <div class="detail-transcript" id="detailTranscript"></div>
                 </div>
             </div>
+
+            <!-- ═══ Knowledge Base Manager ═══ -->
+            <div id="kbManagerView" class="center-view d-none">
+              <div class="view-header">
+                <h6>Knowledge Base</h6>
+                <div class="d-flex gap-2 align-items-center">
+                  <select class="form-select form-select-sm" id="kbCampaignSelect" style="width:auto;min-width:150px;" onchange="window.setKBCampaignFilter(this.value)">
+                    <option value="">All Campaigns</option>
+                  </select>
+                  <input type="text" class="form-control form-control-sm" id="kbSearchInput" placeholder="Search documents...">
+                  <label class="btn btn-sm btn-primary" for="kbFileUpload">Upload</label>
+                  <input type="file" id="kbFileUpload" class="d-none" accept=".pdf,.docx,.txt" multiple>
+                </div>
+              </div>
+              <div id="kbDropZone" class="kb-dropzone d-none">
+                <p>Drop files here to upload (PDF, DOCX, TXT — max 50MB)</p>
+              </div>
+              <div id="kbSearchResults" class="d-none">
+                <h6 class="small text-muted mb-2">Search Results</h6>
+                <div id="kbSearchResultsList"></div>
+              </div>
+              <div id="kbDocumentList" class="document-list">
+                <div class="text-center py-3 text-muted small">Loading documents...</div>
+              </div>
+            </div>
+
+            <!-- ═══ Intent Library ═══ -->
+            <div id="intentLibraryView" class="center-view d-none">
+              <div class="view-header">
+                <h6>Intent Library</h6>
+                <div class="d-flex gap-2 align-items-center">
+                  <select class="form-select form-select-sm" id="intentStatusFilter" style="width:auto;">
+                    <option value="">All Status</option>
+                    <option value="Discovered">Discovered</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Discarded">Discarded</option>
+                  </select>
+                  <button class="btn btn-sm btn-outline-primary" id="discoverIntentsBtn">Discover Intents</button>
+                </div>
+              </div>
+              <div id="intentBulkBar" class="bulk-action-bar d-none">
+                <span id="intentSelectedCount">0 selected</span>
+                <button class="btn btn-sm btn-success" id="bulkApproveBtn">Approve</button>
+                <button class="btn btn-sm btn-outline-danger" id="bulkDiscardBtn">Discard</button>
+              </div>
+              <div id="intentList" class="intent-list">
+                <div class="text-center py-3 text-muted small">Loading intents...</div>
+              </div>
+            </div>
+
+            <!-- ═══ Quality Dashboard ═══ -->
+            <div id="qualityDashboardView" class="center-view d-none">
+              <div class="view-header">
+                <h6>Quality Dashboard</h6>
+                <div class="d-flex gap-2">
+                  <select class="form-select form-select-sm" id="qualityPeriod" style="width:auto;">
+                    <option value="7">Last 7 days</option>
+                    <option value="30" selected>Last 30 days</option>
+                    <option value="90">Last 90 days</option>
+                  </select>
+                  <button class="btn btn-sm btn-outline-secondary" id="editCriteriaBtn">Edit Criteria</button>
+                </div>
+              </div>
+              <div class="quality-stats-grid" id="qualityStatsGrid">
+                <div class="quality-stat-card">
+                  <div class="quality-stat-value" id="qAvgScore">—</div>
+                  <div class="quality-stat-label">Avg Score</div>
+                </div>
+                <div class="quality-stat-card">
+                  <div class="quality-stat-value" id="qTotalEvals">—</div>
+                  <div class="quality-stat-label">Evaluations</div>
+                </div>
+                <div class="quality-stat-card">
+                  <div class="quality-stat-value" id="qFlagged">—</div>
+                  <div class="quality-stat-label">Flagged</div>
+                </div>
+                <div class="quality-stat-card">
+                  <div class="quality-stat-value" id="qPassRate">—</div>
+                  <div class="quality-stat-label">Pass Rate</div>
+                </div>
+              </div>
+              <div id="qualityEvalList" class="evaluation-list">
+                <div class="text-center py-3 text-muted small">Loading evaluations...</div>
+              </div>
+              <!-- Evaluation Detail View -->
+              <div id="qualityEvalDetail" class="eval-detail d-none">
+                <div class="view-header">
+                  <h6 id="evalDetailTitle">Evaluation Detail</h6>
+                  <button class="btn btn-sm btn-outline-secondary" onclick="closeEvalDetail()">Back</button>
+                </div>
+                <div class="eval-detail-summary" id="evalDetailSummary"></div>
+                <div class="eval-criteria-list" id="evalCriteriaList"></div>
+              </div>
+              <!-- Criteria editor modal -->
+              <div id="criteriaEditor" class="criteria-editor d-none">
+                <div class="view-header">
+                  <h6>Quality Criteria</h6>
+                  <button class="btn btn-sm btn-outline-secondary" id="closeCriteriaBtn">Close</button>
+                </div>
+                <div id="criteriaList"></div>
+                <button class="btn btn-sm btn-primary mt-2" id="saveCriteriaBtn">Save Criteria</button>
+              </div>
+            </div>
+
+            <!-- ═══ Agent Activity ═══ -->
+            <div id="agentActivityView" class="center-view d-none">
+              <div class="view-header">
+                <h6>Agent Activity</h6>
+                <div class="d-flex gap-2 align-items-center">
+                  <select class="form-select form-select-sm" id="agentTypeFilter" style="width:auto;">
+                    <option value="">All Agents</option>
+                    <option value="IntentDiscovery">Intent Discovery</option>
+                    <option value="CaseManagement">Case Management</option>
+                    <option value="QualityEvaluation">Quality Evaluation</option>
+                    <option value="KnowledgeGap">Knowledge Gap</option>
+                  </select>
+                  <button class="btn btn-sm btn-outline-secondary" onclick="loadAgentActivity()">Refresh</button>
+                </div>
+              </div>
+
+              <!-- Live Processing Card (shown during batch analysis) -->
+              <div id="agentProcessingCard" class="agent-processing-card d-none">
+                <div class="processing-card-header">
+                  <div class="processing-card-title">
+                    <span class="processing-pulse"></span>
+                    AI Analysis in Progress
+                  </div>
+                  <span class="processing-call-id" id="processingCallId"></span>
+                </div>
+                <div class="processing-agents-list" id="processingAgentsList">
+                  <div class="processing-agent-row" data-agent="caseManagement">
+                    <span class="processing-agent-icon" id="icon-caseManagement">⏳</span>
+                    <span class="processing-agent-name">Case Management</span>
+                    <span class="processing-agent-status" id="status-caseManagement">Pending</span>
+                  </div>
+                  <div class="processing-agent-row" data-agent="qualityEvaluation">
+                    <span class="processing-agent-icon" id="icon-qualityEvaluation">⏳</span>
+                    <span class="processing-agent-name">Quality Evaluation</span>
+                    <span class="processing-agent-status" id="status-qualityEvaluation">Pending</span>
+                  </div>
+                  <div class="processing-agent-row" data-agent="knowledgeGapDetection">
+                    <span class="processing-agent-icon" id="icon-knowledgeGapDetection">⏳</span>
+                    <span class="processing-agent-name">Knowledge Gap Detection</span>
+                    <span class="processing-agent-status" id="status-knowledgeGapDetection">Pending</span>
+                  </div>
+                  <div class="processing-agent-row" data-agent="summaryGeneration">
+                    <span class="processing-agent-icon" id="icon-summaryGeneration">⏳</span>
+                    <span class="processing-agent-name">Summary Generation</span>
+                    <span class="processing-agent-status" id="status-summaryGeneration">Pending</span>
+                  </div>
+                  <div class="processing-agent-row" data-agent="intentDiscovery">
+                    <span class="processing-agent-icon" id="icon-intentDiscovery">⏳</span>
+                    <span class="processing-agent-name">Intent Discovery</span>
+                    <span class="processing-agent-status" id="status-intentDiscovery">Pending</span>
+                  </div>
+                </div>
+                <div class="processing-progress-bar">
+                  <div class="processing-progress-fill" id="processingProgressFill" style="width:0%"></div>
+                </div>
+                <div class="processing-progress-label" id="processingProgressLabel">0% complete</div>
+              </div>
+
+              <div class="agent-stats-row" id="agentStatsRow">
+                <span class="agent-stat"><strong id="agentTotalActions">0</strong> actions</span>
+                <span class="agent-stat"><strong id="agentSuccessRate">—</strong> success</span>
+                <span class="agent-stat"><strong id="agentFailures">0</strong> failures</span>
+              </div>
+              <div id="agentActivityList" class="activity-list">
+                <div class="text-center py-3 text-muted small">Loading activity...</div>
+              </div>
+            </div>
+
+            <!-- ═══ Knowledge Gaps ═══ -->
+            <div id="knowledgeGapsView" class="center-view d-none">
+              <div class="view-header">
+                <h6>Knowledge Gaps</h6>
+                <div class="d-flex gap-2 align-items-center">
+                  <select class="form-select form-select-sm" id="gapStatusFilter" style="width:auto;">
+                    <option value="">All Status</option>
+                    <option value="Identified">Identified</option>
+                    <option value="ArticleDrafted">Article Drafted</option>
+                    <option value="Published">Published</option>
+                    <option value="Dismissed">Dismissed</option>
+                  </select>
+                </div>
+              </div>
+              <div id="gapList" class="gap-list">
+                <div class="text-center py-3 text-muted small">Loading knowledge gaps...</div>
+              </div>
+              <div id="gapDetail" class="gap-detail d-none">
+                <div class="view-header">
+                  <h6 id="gapDetailTitle">Gap Detail</h6>
+                  <button class="btn btn-sm btn-outline-secondary" onclick="closeGapDetail()">Back</button>
+                </div>
+                <div id="gapDetailContent"></div>
+              </div>
+            </div>
+
+            <!-- ═══ Cases List View (Center Panel) ═══ -->
+            <div id="casesListView" class="center-view d-none">
+              <div class="view-header">
+                <h6>Cases</h6>
+                <div class="d-flex gap-2 align-items-center">
+                  <select class="form-select form-select-sm" id="casesStatusFilter" style="width:auto;">
+                    <option value="">All Status</option>
+                    <option value="Open">Open</option>
+                    <option value="InProgress">In Progress</option>
+                    <option value="Resolved">Resolved</option>
+                    <option value="Closed">Closed</option>
+                  </select>
+                  <button class="btn btn-sm btn-outline-secondary" onclick="loadCenterCases()">Refresh</button>
+                </div>
+              </div>
+              <div class="cases-stats-row" id="casesStatsRow">
+                <span class="cases-stat"><strong id="casesTotal">0</strong> total</span>
+                <span class="cases-stat"><strong id="casesOpen">0</strong> open</span>
+                <span class="cases-stat"><strong id="casesResolved">0</strong> resolved</span>
+              </div>
+              <div id="centerCasesList" class="cases-center-list">
+                <div class="text-center py-3 text-muted small">Loading cases...</div>
+              </div>
+            </div>
+
+            <!-- ═══ Case Detail View ═══ -->
+            <div id="caseDetailView" class="center-view d-none">
+              <div class="view-header">
+                <h6 id="caseDetailTitle">Case Detail</h6>
+                <button class="btn btn-sm btn-outline-secondary" onclick="closeCaseDetail()">Back to Cases</button>
+              </div>
+              <div id="caseDetailContent"></div>
+            </div>
         </div>
     </section>
 
@@ -503,6 +776,9 @@
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="history-calls-tab" data-bs-toggle="tab" data-bs-target="#historyCallsPane" type="button" role="tab" aria-controls="historyCallsPane" aria-selected="false">Historical calls</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="cases-tab" data-bs-toggle="tab" data-bs-target="#casesPane" type="button" role="tab" aria-controls="casesPane" aria-selected="false">Cases</button>
                 </li>
             </ul>
             <div class="tab-content pt-2">
@@ -563,6 +839,15 @@
                     </div>
                     <div id="historyList" class="history-list d-none"></div>
                 </div>
+
+                <div class="tab-pane fade" id="casesPane" role="tabpanel" aria-labelledby="cases-tab" tabindex="0">
+                  <div id="casesListLoading" class="text-center py-3">
+                    <div class="spinner-border spinner-border-sm" role="status"></div>
+                    <span class="ms-2 small">Loading cases...</span>
+                  </div>
+                  <div id="casesListEmpty" class="text-center py-3 text-muted small d-none">No cases yet.</div>
+                  <div id="casesList" class="cases-list d-none"></div>
+                </div>
             </div>
         </div>
     </aside>
@@ -598,4 +883,4 @@
 </div>
 
 <script src="~/lib/microsoft-signalr/signalr.min.js"></script>
-<script src="~/js/site.js"></script>
+<script src="~/js/site.js" asp-append-version="true"></script>

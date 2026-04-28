@@ -17,6 +17,11 @@ namespace ContactCenterPOC.Models
 
         public bool IsDefault { get; set; }
 
+        public string? EscalationPhoneNumber { get; set; }
+        public bool RestrictToProvidedDataOnly { get; set; }
+        public bool IsInbound { get; set; }
+        public string? InboundPhoneNumber { get; set; }
+
         public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     }
 
@@ -32,5 +37,10 @@ namespace ContactCenterPOC.Models
 
         [Required(ErrorMessage = "AI behavior instructions are required")]
         public string AiBehaviorInstructions { get; set; } = string.Empty;
+
+        public string? EscalationPhoneNumber { get; set; }
+        public bool RestrictToProvidedDataOnly { get; set; }
+        public bool IsInbound { get; set; }
+        public string? InboundPhoneNumber { get; set; }
     }
 }

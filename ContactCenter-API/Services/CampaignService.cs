@@ -104,13 +104,13 @@ namespace ContactCenterPOC.Services
             _logger.LogInformation("Reset campaigns to defaults ({Count} campaigns)", _campaigns.Count);
         }
 
-        public async Task<List<Campaign>> GetAllAsync()
+        public virtual async Task<List<Campaign>> GetAllAsync()
         {
             await EnsureInitializedAsync();
             return _campaigns.ToList();
         }
 
-        public async Task<Campaign?> GetByIdAsync(string id)
+        public virtual async Task<Campaign?> GetByIdAsync(string id)
         {
             await EnsureInitializedAsync();
             return _campaigns.FirstOrDefault(c => c.Id == id);
@@ -132,6 +132,10 @@ namespace ContactCenterPOC.Services
                 Title = request.Title,
                 Description = request.Description,
                 AiBehaviorInstructions = request.AiBehaviorInstructions,
+                EscalationPhoneNumber = request.EscalationPhoneNumber,
+                RestrictToProvidedDataOnly = request.RestrictToProvidedDataOnly,
+                IsInbound = request.IsInbound,
+                InboundPhoneNumber = request.InboundPhoneNumber,
                 IsDefault = false,
                 CreatedAt = DateTimeOffset.UtcNow
             };

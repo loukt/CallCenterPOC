@@ -34,7 +34,7 @@ namespace ContactCenterPOC.Services
             _logger = logger;
         }
 
-        public async Task<OperatorSettings> GetSettingsAsync()
+        public virtual async Task<OperatorSettings> GetSettingsAsync()
         {
             if (_cached != null && (DateTimeOffset.UtcNow - _cachedAt) < _cacheTtl)
             {
@@ -67,7 +67,7 @@ namespace ContactCenterPOC.Services
             }
         }
 
-        public async Task<OperatorSettings> SaveSettingsAsync(OperatorSettings settings)
+        public virtual async Task<OperatorSettings> SaveSettingsAsync(OperatorSettings settings)
         {
             await _lock.WaitAsync();
             try
