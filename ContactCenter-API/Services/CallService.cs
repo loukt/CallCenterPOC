@@ -103,26 +103,28 @@ namespace ContactCenterPOC.Services
             string? resolvedCampaignTitle = null;
             Campaign? resolvedCampaign = null;
 
-            if (!string.IsNullOrWhiteSpace(callContextPrompt))
+            if (!string.IsNullOrWhiteSpace(campaignId))
             {
-                // Direct prompt takes precedence
-                effectivePrompt = callContextPrompt;
-            }
-            else if (!string.IsNullOrWhiteSpace(campaignId))
-            {
-                // Look up campaign
                 resolvedCampaign = await _campaignService.GetByIdAsync(campaignId);
                 if (resolvedCampaign != null)
                 {
-                    effectivePrompt = resolvedCampaign.AiBehaviorInstructions;
                     resolvedCampaignId = resolvedCampaign.Id;
                     resolvedCampaignTitle = resolvedCampaign.Title;
                 }
                 else
                 {
                     _logger.LogWarning("Campaign {CampaignId} not found, using default prompt", campaignId);
-                    effectivePrompt = _configuration["AzureOpenAI:SystemPrompt"] ?? "You are an AI assistant that helps people find information.";
                 }
+            }
+
+            if (!string.IsNullOrWhiteSpace(callContextPrompt))
+            {
+                // Direct prompt takes precedence
+                effectivePrompt = callContextPrompt;
+            }
+            else if (resolvedCampaign != null)
+            {
+                effectivePrompt = resolvedCampaign.AiBehaviorInstructions;
             }
             else
             {
