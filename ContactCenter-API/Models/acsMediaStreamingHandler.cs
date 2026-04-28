@@ -67,77 +67,63 @@ namespace ContactCenterPOC.Models
         // Method to receive messages from WebSocket — dispatches to VoiceLive or OpenAI
         public async Task ProcessWebSocketAsync(string callContextPrompt)
         {
-            
             if (m_webSocket == null)
             {
                 return;
             }
 
-            // Dispatch to VoiceLive or OpenAI based on VoiceApiMode (simple if/switch per Constitution I)
-            if (_voiceApiMode == "VoiceLive" && _voiceLiveConfig != null && _voiceLiveConfig.IsConfigured)
+            try
             {
-                _logger.LogInformation("[MediaStream-{CallId}] Dispatching to VoiceLiveService (model={Model}, voice={Voice})",
-                    _callConnectionId, _voiceLiveModel, _selectedVoiceLiveVoice);
-                m_vlServiceHandler = new VoiceLiveService(this, callContextPrompt, _voiceLiveConfig, _logger, _hubContext,
-                    _callConnectionId, _voiceLiveModel ?? "gpt-realtime-mini", _selectedVoiceLiveVoice,
-                    _hangUpCallback, _sentimentService, _activeCalls, _emotionService);
-
-                try
+                if (_voiceApiMode == "VoiceLive" && _voiceLiveConfig != null && _voiceLiveConfig.IsConfigured)
                 {
-                    m_vlServiceHandler.StartConversation();
-                    await StartReceivingFromAcsMediaWebSocket();
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogInformation($" at MediaStreamHandler Process websocket Exception -> {ex}");
-                }
-                finally
-                {
-                    m_vlServiceHandler.Close();
-                    this.Close();
-
-                    if (_hangUpCallback != null)
+                    try
                     {
-                        try
-                        {
-                            await _hangUpCallback(_callConnectionId);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "Error during hang-up callback for call {CallConnectionId}", _callConnectionId);
-                        }
+                        _logger.LogInformation("[MediaStream-{CallId}] Dispatching to VoiceLiveService (model={Model}, voice={Voice})",
+                            _callConnectionId, _voiceLiveModel, _selectedVoiceLiveVoice);
+                        m_vlServiceHandler = new VoiceLiveService(this, callContextPrompt, _voiceLiveConfig, _logger, _hubContext,
+                            _callConnectionId, _voiceLiveModel ?? "gpt-realtime-mini", _selectedVoiceLiveVoice,
+                            _hangUpCallback, _sentimentService, _activeCalls, _emotionService);
+                        m_vlServiceHandler.StartConversation();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex,
+                            "[MediaStream-{CallId}] VoiceLive startup failed; falling back to OpenAI realtime audio for this call",
+                            _callConnectionId);
+                        m_vlServiceHandler?.Close();
+                        m_vlServiceHandler = null;
                     }
                 }
-            }
-            else
-            {
-                // Default: OpenAI Realtime path
-                m_aiServiceHandler = new AzureOpenAIService(this, callContextPrompt, m_configuration, _logger, _hubContext, _callConnectionId, _hangUpCallback, _sentimentService, _activeCalls, _emotionService, _selectedVoice);
 
-                try
+                if (m_vlServiceHandler == null)
                 {
+                    _logger.LogInformation("[MediaStream-{CallId}] Dispatching to AzureOpenAIService (voice={Voice})",
+                        _callConnectionId, _selectedVoice);
+                    m_aiServiceHandler = new AzureOpenAIService(this, callContextPrompt, m_configuration, _logger, _hubContext, _callConnectionId, _hangUpCallback, _sentimentService, _activeCalls, _emotionService, _selectedVoice);
                     m_aiServiceHandler.StartConversation();
-                    await StartReceivingFromAcsMediaWebSocket();
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogInformation($" at MediaStreamHandler Process websocket Exception -> {ex}");
-                }
-                finally
-                {
-                    m_aiServiceHandler.Close();
-                    this.Close();
 
-                    if (_hangUpCallback != null)
+                await StartReceivingFromAcsMediaWebSocket();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[MediaStream-{CallId}] Media stream processing failed", _callConnectionId);
+            }
+            finally
+            {
+                m_vlServiceHandler?.Close();
+                m_aiServiceHandler?.Close();
+                this.Close();
+
+                if (_hangUpCallback != null)
+                {
+                    try
                     {
-                        try
-                        {
-                            await _hangUpCallback(_callConnectionId);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "Error during hang-up callback for call {CallConnectionId}", _callConnectionId);
-                        }
+                        await _hangUpCallback(_callConnectionId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error during hang-up callback for call {CallConnectionId}", _callConnectionId);
                     }
                 }
             }

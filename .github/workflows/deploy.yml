@@ -6,6 +6,7 @@ on:
       - 001-outbound-callcenter-poc
       - 002-voicelive-integration
       - 003-agentic-contact-center
+      - 004-foundry-agents
   workflow_dispatch:
 
 env:
