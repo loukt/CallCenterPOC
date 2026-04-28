@@ -189,16 +189,11 @@ namespace ContactCenterPOC.Controllers
                 _logger.LogInformation($"Callback triggered on WS It's rerouted to the websocket AND WORKING");
 
                 await _callService.StartCallInteraction(HttpContext,targetNumber);
-            }
-            else
-            {
-                _logger.LogInformation($"Callback triggered on WS It's rerouted to the websocket but doesn't look like it's working");
-
-                // If it's not a WebSocket request, return a bad request
-                HttpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
+                return new EmptyResult();
             }
 
-            return Ok();
+            _logger.LogInformation($"Callback triggered on WS It's rerouted to the websocket but doesn't look like it's working");
+            return BadRequest();
         }
 
 

@@ -172,6 +172,19 @@ jobs:
             -AppName ${{ env.API_APP_NAME }} `
             -SettingsFile $env:API_APP_SETTINGS_FILE
 
+      - name: Enforce VoiceLive managed identity settings
+        if: env.AZURE_LOGIN_USE_OIDC == 'true' || env.AZURE_LOGIN_USE_CREDENTIALS == 'true'
+        shell: pwsh
+        run: |
+          az webapp config appsettings set `
+            --resource-group ${{ env.API_RESOURCE_GROUP }} `
+            --name ${{ env.API_APP_NAME }} `
+            --settings VoiceLive__EndpointUri=https://ys-aoai-sweden.cognitiveservices.azure.com/ | Out-Null
+          az webapp config appsettings delete `
+            --resource-group ${{ env.API_RESOURCE_GROUP }} `
+            --name ${{ env.API_APP_NAME }} `
+            --setting-names VoiceLive__Key | Out-Null
+
   deploy-app:
     name: Deploy APP
     runs-on: ubuntu-latest
