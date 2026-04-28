@@ -9,6 +9,16 @@ namespace ContactCenterPOC.Models
 
         public static float[] CreateEmptyVector() => new float[VectorDimensions];
 
+        public static float[] EnsureVector(IReadOnlyList<float>? vector)
+        {
+            if (vector == null || vector.Count != VectorDimensions)
+            {
+                return CreateEmptyVector();
+            }
+
+            return vector as float[] ?? vector.ToArray();
+        }
+
         [SimpleField(IsKey = true)]
         public string Id { get; set; } = string.Empty;
 

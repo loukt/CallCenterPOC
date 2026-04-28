@@ -60,15 +60,26 @@ namespace ContactCenterPOC.Services
             await EnsureIndexAsync();
             if (_searchClient == null) return;
 
+            var documents = new List<SearchDocument>(chunks.Count);
             foreach (var chunk in chunks)
             {
-                if (chunk.ContentVector == null || chunk.ContentVector.Count == 0)
+                var vector = KnowledgeChunk.EnsureVector(chunk.ContentVector);
+                chunk.ContentVector = vector;
+
+                documents.Add(new SearchDocument
                 {
-                    chunk.ContentVector = KnowledgeChunk.CreateEmptyVector();
-                }
+                    [nameof(KnowledgeChunk.Id)] = chunk.Id,
+                    [nameof(KnowledgeChunk.DocumentId)] = chunk.DocumentId,
+                    [nameof(KnowledgeChunk.DocumentTitle)] = chunk.DocumentTitle,
+                    [nameof(KnowledgeChunk.Content)] = chunk.Content,
+                    [nameof(KnowledgeChunk.ChunkIndex)] = chunk.ChunkIndex,
+                    [nameof(KnowledgeChunk.FileType)] = chunk.FileType,
+                    [nameof(KnowledgeChunk.CampaignId)] = chunk.CampaignId,
+                    [nameof(KnowledgeChunk.ContentVector)] = vector
+                });
             }
 
-            var batch = IndexDocumentsBatch.Upload(chunks);
+            var batch = IndexDocumentsBatch.Upload(documents);
             await _searchClient.IndexDocumentsAsync(batch);
             _logger.LogInformation("Indexed {Count} chunks", chunks.Count);
         }
