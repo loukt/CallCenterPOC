@@ -160,7 +160,22 @@ jobs:
           API_APP_SETTINGS_JSON: ${{ secrets.AZURE_API_APPSETTINGS_JSON }}
         run: |
           $path = Join-Path $env:RUNNER_TEMP 'api-appsettings.json'
-          Set-Content -LiteralPath $path -Value $env:API_APP_SETTINGS_JSON -Encoding utf8
+          $settings = @($env:API_APP_SETTINGS_JSON | ConvertFrom-Json)
+          $settings = @($settings | Where-Object { $_.name -ne 'VoiceLive__Key' })
+
+          $voiceLiveEndpoint = $settings | Where-Object { $_.name -eq 'VoiceLive__EndpointUri' } | Select-Object -First 1
+          if ($null -ne $voiceLiveEndpoint) {
+            $voiceLiveEndpoint.value = 'https://ys-aoai-sweden.cognitiveservices.azure.com/'
+          }
+          else {
+            $settings += [pscustomobject]@{
+              name = 'VoiceLive__EndpointUri'
+              value = 'https://ys-aoai-sweden.cognitiveservices.azure.com/'
+              slotSetting = $false
+            }
+          }
+
+          $settings | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $path -Encoding utf8
           "API_APP_SETTINGS_FILE=$path" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Apply API App Settings
