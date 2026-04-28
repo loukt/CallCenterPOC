@@ -108,10 +108,11 @@ namespace ContactCenterPOC.Services
                 InputAudioEchoCancellation = new AudioEchoCancellation(),
                 TurnDetection = new AzureSemanticVadTurnDetection
                 {
-                    Threshold = 0.75f,
-                    SpeechDuration = TimeSpan.FromMilliseconds(250),
+                    Threshold = 0.90f,
+                    SilenceDuration = TimeSpan.FromMilliseconds(900),
+                    SpeechDuration = TimeSpan.FromMilliseconds(500),
                     InterruptResponse = false,
-                    RemoveFillerWords = true
+                    RemoveFillerWords = false
                 },
                 InputAudioTranscription = new AudioInputTranscriptionOptions(AudioInputTranscriptionOptionsModel.Whisper1)
             };

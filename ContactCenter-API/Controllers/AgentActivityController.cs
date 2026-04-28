@@ -17,9 +17,13 @@ namespace ContactCenterPOC.Controllers
         [HttpGet]
         public async Task<IActionResult> GetActivity(
             [FromQuery] string? agentName = null,
+            [FromQuery] string? agentType = null,
             [FromQuery] string? result = null,
-            [FromQuery] int max = 200)
+            [FromQuery] int max = 200,
+            [FromQuery] int? limit = null)
         {
+            agentName ??= agentType;
+            if (limit.HasValue) max = limit.Value;
             if (max < 1) max = 1;
             if (max > 200) max = 200;
 

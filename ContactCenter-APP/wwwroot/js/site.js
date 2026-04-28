@@ -2696,8 +2696,8 @@
         var listEl = document.getElementById("agentActivityList");
         listEl.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div> Loading...</div>';
         var agentType = document.getElementById("agentTypeFilter").value;
-        var url = apiBaseUrl() + "/api/agentactivity?limit=100";
-        if (agentType) url += "&agentType=" + agentType;
+        var url = apiBaseUrl() + "/api/agentactivity?max=100";
+        if (agentType) url += "&agentName=" + encodeURIComponent(agentType);
         fetch(url)
             .then(function (r) { return r.json(); })
             .then(function (activities) {
@@ -2707,20 +2707,21 @@
                     return;
                 }
                 document.getElementById("agentTotalActions").textContent = activities.length;
-                var failures = activities.filter(function (a) { return a.result === "Failure" || a.result === 2; }).length;
+                var failures = activities.filter(function (a) { return a.result === "Failure" || a.result === 1; }).length;
                 document.getElementById("agentFailures").textContent = failures;
                 document.getElementById("agentSuccessRate").textContent = Math.round(((activities.length - failures) / activities.length) * 100) + "%";
                 listEl.innerHTML = "";
                 activities.forEach(function (a) {
-                    var resultClass = (a.result === "Success" || a.result === 0) ? "text-success" : (a.result === "Failure" || a.result === 2) ? "text-danger" : "text-warning";
-                    var resultLabel = (a.result === 0 || a.result === "Success") ? "Success" : (a.result === 2 || a.result === "Failure") ? "Failure" : "Partial";
+                    var resultClass = (a.result === "Success" || a.result === 0) ? "text-success" : (a.result === "Failure" || a.result === 1) ? "text-danger" : "text-warning";
+                    var resultLabel = (a.result === 0 || a.result === "Success") ? "Success" : (a.result === 1 || a.result === "Failure") ? "Failure" : "Partial";
                     var card = document.createElement("div");
                     card.className = "activity-card";
                     card.innerHTML = '<div class="d-flex justify-content-between">' +
                         '<div><strong class="small">' + escapeHtml(a.agentType || a.agentName || "Agent") + '</strong>' +
                         ' <span class="' + resultClass + ' small">' + resultLabel + '</span></div>' +
                         '<div class="text-muted small">' + new Date(a.timestamp || a.executedAt).toLocaleTimeString() + '</div></div>' +
-                        '<div class="text-muted small">' + escapeHtml(a.action || a.actionDescription || "") + '</div>' +
+                        '<div class="text-muted small">' + escapeHtml(a.actionType || a.action || a.actionDescription || "") + '</div>' +
+                        (a.resultDetail ? '<div class="text-muted small text-truncate" title="' + escapeHtml(a.resultDetail) + '">' + escapeHtml(a.resultDetail) + '</div>' : '') +
                         (a.errorMessage ? '<div class="text-danger small">' + escapeHtml(a.errorMessage) + '</div>' : '');
                     listEl.appendChild(card);
                 });

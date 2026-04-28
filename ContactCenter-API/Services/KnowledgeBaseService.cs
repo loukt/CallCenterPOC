@@ -144,7 +144,7 @@ namespace ContactCenterPOC.Services
                         ChunkIndex = i,
                         FileType = doc.FileType,
                         CampaignId = doc.CampaignId ?? string.Empty,
-                        ContentVector = i < embeddings.Count ? embeddings[i] : null
+                        ContentVector = i < embeddings.Count ? embeddings[i] : KnowledgeChunk.CreateEmptyVector()
                     });
                 }
 
@@ -495,7 +495,7 @@ namespace ContactCenterPOC.Services
                     ChunkIndex = i,
                     FileType = "TXT",
                     CampaignId = string.Empty,
-                    ContentVector = i < embeddings.Count ? embeddings[i] : null
+                    ContentVector = i < embeddings.Count ? embeddings[i] : KnowledgeChunk.CreateEmptyVector()
                 });
             }
 

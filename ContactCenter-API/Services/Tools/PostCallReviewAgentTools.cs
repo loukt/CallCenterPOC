@@ -1,6 +1,7 @@
 using ContactCenterPOC.Hubs;
 using ContactCenterPOC.Models;
 using Microsoft.AspNetCore.SignalR;
+using System.Diagnostics;
 using System.Text.Json;
 
 namespace ContactCenterPOC.Services.Tools
@@ -9,6 +10,7 @@ namespace ContactCenterPOC.Services.Tools
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly CallHistoryService _callHistoryService;
+        private readonly AgentActivityService _agentActivityService;
         private readonly ILogger<PostCallReviewAgentTools> _logger;
 
         // Lazily resolve to break circular dependency
@@ -34,11 +36,25 @@ namespace ContactCenterPOC.Services.Tools
         public PostCallReviewAgentTools(
             IServiceProvider serviceProvider,
             CallHistoryService callHistoryService,
+            AgentActivityService agentActivityService,
             ILogger<PostCallReviewAgentTools> logger)
         {
             _serviceProvider = serviceProvider;
             _callHistoryService = callHistoryService;
+            _agentActivityService = agentActivityService;
             _logger = logger;
+        }
+
+        private async Task LogStepAsync(string agentName, string actionType, AgentActionResult result, string? callConnectionId, string? detail, long durationMs)
+        {
+            try
+            {
+                await _agentActivityService.LogActivityAsync(agentName, actionType, result, detail, callConnectionId, durationMs);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist post-call agent activity for {AgentName}/{ActionType}", agentName, actionType);
+            }
         }
 
         public void ResetProgress()
@@ -68,22 +84,31 @@ namespace ContactCenterPOC.Services.Tools
 
         public async Task<string> RunCaseManagementAsync(string callConnectionId)
         {
+            var sw = Stopwatch.StartNew();
             await SendProgressAsync("caseManagement", "Case Management", "processing");
             try
             {
                 var callRecord = await _callHistoryService.GetByIdAsync(callConnectionId);
                 if (callRecord == null)
+                {
+                    sw.Stop();
+                    await LogStepAsync("CaseManagement", "PostCallReviewStep", AgentActionResult.Failure, callConnectionId, "Call record not found", sw.ElapsedMilliseconds);
                     return JsonSerializer.Serialize(new { status = "failed", error = "Call record not found" });
+                }
 
                 await Orchestration.ProcessCallOutcomeAsync(callRecord);
                 _completedCount++;
                 await SendProgressAsync("caseManagement", "Case Management", "success");
+                sw.Stop();
+                await LogStepAsync("CaseManagement", "PostCallReviewStep", AgentActionResult.Success, callConnectionId, "Case management completed", sw.ElapsedMilliseconds);
                 return JsonSerializer.Serialize(new { status = "success" });
             }
             catch (Exception ex)
             {
                 _completedCount++;
                 await SendProgressAsync("caseManagement", "Case Management", "failed");
+                sw.Stop();
+                await LogStepAsync("CaseManagement", "PostCallReviewStep", AgentActionResult.Failure, callConnectionId, ex.Message, sw.ElapsedMilliseconds);
                 _logger.LogWarning(ex, "PostCallReview: case management failed for {CallId}", callConnectionId);
                 return JsonSerializer.Serialize(new { status = "failed", error = ex.Message });
             }
@@ -91,22 +116,31 @@ namespace ContactCenterPOC.Services.Tools
 
         public async Task<string> RunQualityEvaluationAsync(string callConnectionId)
         {
+            var sw = Stopwatch.StartNew();
             await SendProgressAsync("qualityEvaluation", "Quality Evaluation", "processing");
             try
             {
                 var callRecord = await _callHistoryService.GetByIdAsync(callConnectionId);
                 if (callRecord == null)
+                {
+                    sw.Stop();
+                    await LogStepAsync("QualityAssurance", "PostCallReviewStep", AgentActionResult.Failure, callConnectionId, "Call record not found", sw.ElapsedMilliseconds);
                     return JsonSerializer.Serialize(new { status = "failed", error = "Call record not found" });
+                }
 
                 await Orchestration.EvaluateCallAsync(callRecord);
                 _completedCount++;
                 await SendProgressAsync("qualityEvaluation", "Quality Evaluation", "success");
+                sw.Stop();
+                await LogStepAsync("QualityAssurance", "PostCallReviewStep", AgentActionResult.Success, callConnectionId, "Quality evaluation completed", sw.ElapsedMilliseconds);
                 return JsonSerializer.Serialize(new { status = "success" });
             }
             catch (Exception ex)
             {
                 _completedCount++;
                 await SendProgressAsync("qualityEvaluation", "Quality Evaluation", "failed");
+                sw.Stop();
+                await LogStepAsync("QualityAssurance", "PostCallReviewStep", AgentActionResult.Failure, callConnectionId, ex.Message, sw.ElapsedMilliseconds);
                 _logger.LogWarning(ex, "PostCallReview: quality eval failed for {CallId}", callConnectionId);
                 return JsonSerializer.Serialize(new { status = "failed", error = ex.Message });
             }
@@ -114,22 +148,31 @@ namespace ContactCenterPOC.Services.Tools
 
         public async Task<string> RunKnowledgeGapDetectionAsync(string callConnectionId)
         {
+            var sw = Stopwatch.StartNew();
             await SendProgressAsync("knowledgeGapDetection", "Knowledge Gap Detection", "processing");
             try
             {
                 var callRecord = await _callHistoryService.GetByIdAsync(callConnectionId);
                 if (callRecord == null)
+                {
+                    sw.Stop();
+                    await LogStepAsync("KnowledgeManagement", "PostCallReviewStep", AgentActionResult.Failure, callConnectionId, "Call record not found", sw.ElapsedMilliseconds);
                     return JsonSerializer.Serialize(new { status = "failed", error = "Call record not found" });
+                }
 
                 await Orchestration.DetectKnowledgeGapsAsync(callRecord);
                 _completedCount++;
                 await SendProgressAsync("knowledgeGapDetection", "Knowledge Gap Detection", "success");
+                sw.Stop();
+                await LogStepAsync("KnowledgeManagement", "PostCallReviewStep", AgentActionResult.Success, callConnectionId, "Knowledge gap detection completed", sw.ElapsedMilliseconds);
                 return JsonSerializer.Serialize(new { status = "success" });
             }
             catch (Exception ex)
             {
                 _completedCount++;
                 await SendProgressAsync("knowledgeGapDetection", "Knowledge Gap Detection", "failed");
+                sw.Stop();
+                await LogStepAsync("KnowledgeManagement", "PostCallReviewStep", AgentActionResult.Failure, callConnectionId, ex.Message, sw.ElapsedMilliseconds);
                 _logger.LogWarning(ex, "PostCallReview: knowledge gap detection failed for {CallId}", callConnectionId);
                 return JsonSerializer.Serialize(new { status = "failed", error = ex.Message });
             }
@@ -137,12 +180,17 @@ namespace ContactCenterPOC.Services.Tools
 
         public async Task<string> RunSummaryGenerationAsync(string callConnectionId)
         {
+            var sw = Stopwatch.StartNew();
             await SendProgressAsync("summaryGeneration", "Summary Generation", "processing");
             try
             {
                 var callRecord = await _callHistoryService.GetByIdAsync(callConnectionId);
                 if (callRecord == null)
+                {
+                    sw.Stop();
+                    await LogStepAsync("CallSummary", "PostCallReviewStep", AgentActionResult.Failure, callConnectionId, "Call record not found", sw.ElapsedMilliseconds);
                     return JsonSerializer.Serialize(new { status = "failed", error = "Call record not found" });
+                }
 
                 var summary = await Orchestration.GenerateSummaryAsync(callRecord);
                 if (!string.IsNullOrWhiteSpace(summary))
@@ -153,12 +201,16 @@ namespace ContactCenterPOC.Services.Tools
                 }
                 _completedCount++;
                 await SendProgressAsync("summaryGeneration", "Summary Generation", "success");
+                sw.Stop();
+                await LogStepAsync("CallSummary", "PostCallReviewStep", AgentActionResult.Success, callConnectionId, "Summary generation completed", sw.ElapsedMilliseconds);
                 return JsonSerializer.Serialize(new { status = "success", summaryLength = summary?.Length ?? 0 });
             }
             catch (Exception ex)
             {
                 _completedCount++;
                 await SendProgressAsync("summaryGeneration", "Summary Generation", "failed");
+                sw.Stop();
+                await LogStepAsync("CallSummary", "PostCallReviewStep", AgentActionResult.Failure, callConnectionId, ex.Message, sw.ElapsedMilliseconds);
                 _logger.LogWarning(ex, "PostCallReview: summary generation failed for {CallId}", callConnectionId);
                 return JsonSerializer.Serialize(new { status = "failed", error = ex.Message });
             }
@@ -166,18 +218,23 @@ namespace ContactCenterPOC.Services.Tools
 
         public async Task<string> RunIntentDiscoveryAsync()
         {
+            var sw = Stopwatch.StartNew();
             await SendProgressAsync("intentDiscovery", "Intent Discovery", "processing");
             try
             {
                 var count = await Orchestration.DiscoverIntentsAsync();
                 _completedCount++;
                 await SendProgressAsync("intentDiscovery", "Intent Discovery", "success");
+                sw.Stop();
+                await LogStepAsync("CustomerIntent", "PostCallReviewStep", AgentActionResult.Success, ActiveCallId, $"Intent discovery completed; discovered {count} intents", sw.ElapsedMilliseconds);
                 return JsonSerializer.Serialize(new { status = "success", intentsDiscovered = count });
             }
             catch (Exception ex)
             {
                 _completedCount++;
                 await SendProgressAsync("intentDiscovery", "Intent Discovery", "failed");
+                sw.Stop();
+                await LogStepAsync("CustomerIntent", "PostCallReviewStep", AgentActionResult.Failure, ActiveCallId, ex.Message, sw.ElapsedMilliseconds);
                 _logger.LogWarning(ex, "PostCallReview: intent discovery failed");
                 return JsonSerializer.Serialize(new { status = "failed", error = ex.Message });
             }

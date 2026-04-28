@@ -5,6 +5,10 @@ namespace ContactCenterPOC.Models
 {
     public class KnowledgeChunk
     {
+        public const int VectorDimensions = 1536;
+
+        public static float[] CreateEmptyVector() => new float[VectorDimensions];
+
         [SimpleField(IsKey = true)]
         public string Id { get; set; } = string.Empty;
 
@@ -26,7 +30,7 @@ namespace ContactCenterPOC.Models
         [SimpleField(IsFilterable = true)]
         public string CampaignId { get; set; } = string.Empty;
 
-        [VectorSearchField(VectorSearchDimensions = 1536, VectorSearchProfileName = "hybrid-profile")]
-        public IReadOnlyList<float>? ContentVector { get; set; }
+        [VectorSearchField(VectorSearchDimensions = VectorDimensions, VectorSearchProfileName = "hybrid-profile")]
+        public IReadOnlyList<float> ContentVector { get; set; } = CreateEmptyVector();
     }
 }

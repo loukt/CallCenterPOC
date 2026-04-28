@@ -563,6 +563,28 @@ namespace ContactCenterPOC.Services
                 enrichedPrompt += "\n\nIMPORTANT: You MUST only use information from the knowledge base documents below. If you don't know the answer, say so honestly.\n";
             }
 
+            if (_searchService != null)
+            {
+                try
+                {
+                    var contextChunks = await _searchService.GetCampaignContextAsync(campaign?.Id, top: 8);
+                    if (contextChunks.Count > 0)
+                    {
+                        var knowledgeSection = "\n\nKNOWLEDGE BASE CONTEXT (use this when answering campaign/product questions):\n";
+                        foreach (var chunk in contextChunks)
+                        {
+                            var content = chunk.Content.Length > 1200 ? chunk.Content[..1200] + "..." : chunk.Content;
+                            knowledgeSection += $"\nDocument: {chunk.DocumentTitle}\n{content}\n";
+                        }
+                        enrichedPrompt += knowledgeSection;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to inject knowledge base context into prompt");
+                }
+            }
+
             return enrichedPrompt;
         }
 

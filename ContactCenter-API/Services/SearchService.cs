@@ -60,6 +60,14 @@ namespace ContactCenterPOC.Services
             await EnsureIndexAsync();
             if (_searchClient == null) return;
 
+            foreach (var chunk in chunks)
+            {
+                if (chunk.ContentVector == null || chunk.ContentVector.Count == 0)
+                {
+                    chunk.ContentVector = KnowledgeChunk.CreateEmptyVector();
+                }
+            }
+
             var batch = IndexDocumentsBatch.Upload(chunks);
             await _searchClient.IndexDocumentsAsync(batch);
             _logger.LogInformation("Indexed {Count} chunks", chunks.Count);
@@ -100,12 +108,12 @@ namespace ContactCenterPOC.Services
             var searchOptions = new SearchOptions
             {
                 Size = top,
-                Select = { "Id", "DocumentId", "DocumentTitle", "Content", "ChunkIndex" }
+                Select = { "Id", "DocumentId", "DocumentTitle", "Content", "ChunkIndex", "CampaignId" }
             };
 
             if (!string.IsNullOrEmpty(campaignId))
             {
-                searchOptions.Filter = $"CampaignId eq '{campaignId}' or CampaignId eq ''";
+                searchOptions.Filter = $"CampaignId eq '{EscapeODataString(campaignId)}' or CampaignId eq ''";
             }
 
             if (queryVector != null)
@@ -133,6 +141,42 @@ namespace ContactCenterPOC.Services
 
             return items;
         }
+
+        public async Task<List<SearchResultItem>> GetCampaignContextAsync(string? campaignId, int top = 8)
+        {
+            await EnsureIndexAsync();
+            if (_searchClient == null) return new List<SearchResultItem>();
+
+            var searchOptions = new SearchOptions
+            {
+                Size = Math.Clamp(top, 1, 20),
+                Select = { "Id", "DocumentId", "DocumentTitle", "Content", "ChunkIndex", "CampaignId" },
+                OrderBy = { "ChunkIndex asc" }
+            };
+
+            searchOptions.Filter = string.IsNullOrEmpty(campaignId)
+                ? "CampaignId eq ''"
+                : $"CampaignId eq '{EscapeODataString(campaignId)}' or CampaignId eq ''";
+
+            var results = await _searchClient.SearchAsync<KnowledgeChunk>("*", searchOptions);
+            var items = new List<SearchResultItem>();
+
+            await foreach (var result in results.Value.GetResultsAsync())
+            {
+                items.Add(new SearchResultItem
+                {
+                    DocumentId = result.Document.DocumentId,
+                    DocumentTitle = result.Document.DocumentTitle,
+                    Content = result.Document.Content,
+                    Score = (float)(result.Score ?? 0),
+                    ChunkIndex = result.Document.ChunkIndex
+                });
+            }
+
+            return items;
+        }
+
+        private static string EscapeODataString(string value) => value.Replace("'", "''");
     }
 
     public class SearchResultItem
