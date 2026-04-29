@@ -2643,6 +2643,77 @@
     };
 
     // Criteria editor
+    function createCriteriaItem(criterion) {
+        var c = criterion || { name: "", description: "", weight: getRemainingCriteriaWeight(), minimumPassingScore: 3 };
+        var item = document.createElement("div");
+        item.className = "criteria-item mb-2 p-2 border rounded";
+        item.innerHTML =
+            '<div class="d-flex justify-content-between align-items-center mb-1">' +
+            '<label class="criteria-label">Criterion</label>' +
+            '<button type="button" class="btn btn-sm btn-outline-danger criteria-remove">Remove</button></div>' +
+            '<input class="form-control form-control-sm mb-1 criteria-name" value="' + escapeHtml(c.name) + '" placeholder="Criterion name" required>' +
+            '<input class="form-control form-control-sm mb-2 criteria-desc" value="' + escapeHtml(c.description) + '" placeholder="Description">' +
+            '<div class="criteria-number-grid">' +
+            '<div><label class="criteria-label">Weight (%)</label>' +
+            '<input type="number" class="form-control form-control-sm criteria-weight" value="' + (c.weight || 1) + '" min="1" max="100" step="1" inputmode="numeric"></div>' +
+            '<div><label class="criteria-label">Minimum passing score (/5)</label>' +
+            '<input type="number" class="form-control form-control-sm criteria-min" value="' + (c.minimumPassingScore || 3) + '" min="1" max="5" step="0.5" inputmode="decimal"></div></div>';
+
+        item.querySelector(".criteria-remove").addEventListener("click", function () {
+            item.remove();
+            validateCriteriaEditor();
+        });
+        item.querySelectorAll("input").forEach(function (input) {
+            input.addEventListener("input", validateCriteriaEditor);
+        });
+        return item;
+    }
+
+    function getRemainingCriteriaWeight() {
+        var usedWeight = 0;
+        document.querySelectorAll(".criteria-weight").forEach(function (input) {
+            usedWeight += parseInt(input.value, 10) || 0;
+        });
+        return Math.max(1, 100 - usedWeight);
+    }
+
+    function collectQualityCriteria() {
+        var criteria = [];
+        document.querySelectorAll(".criteria-item").forEach(function (item) {
+            criteria.push({
+                name: item.querySelector(".criteria-name").value.trim(),
+                description: item.querySelector(".criteria-desc").value.trim(),
+                weight: parseInt(item.querySelector(".criteria-weight").value, 10) || 0,
+                minimumPassingScore: parseFloat(item.querySelector(".criteria-min").value) || 0
+            });
+        });
+        return criteria;
+    }
+
+    function validateCriteriaEditor() {
+        var criteria = collectQualityCriteria();
+        var totalWeight = criteria.reduce(function (sum, c) { return sum + c.weight; }, 0);
+        var errors = [];
+
+        if (criteria.length === 0) errors.push("Add at least one criterion.");
+        criteria.forEach(function (c, i) {
+            if (!c.name) errors.push("Criterion " + (i + 1) + " needs a name.");
+            if (c.weight < 1 || c.weight > 100) errors.push("Each weight must be between 1% and 100%.");
+            if (c.minimumPassingScore < 1 || c.minimumPassingScore > 5) errors.push("Minimum passing score must be between 1.0 and 5.0.");
+        });
+        if (totalWeight > 100) errors.push("Total weight cannot exceed 100%.");
+
+        var totalEl = document.getElementById("criteriaTotalRow");
+        if (totalEl) {
+            totalEl.textContent = "Total weight: " + totalWeight + "% / 100%" + (errors.length ? " - " + errors[0] : "");
+            totalEl.classList.toggle("criteria-total-error", errors.length > 0);
+        }
+
+        var saveBtn = document.getElementById("saveCriteriaBtn");
+        if (saveBtn) saveBtn.disabled = errors.length > 0;
+        return errors;
+    }
+
     document.getElementById("editCriteriaBtn").addEventListener("click", function () {
         document.getElementById("criteriaEditor").classList.remove("d-none");
         document.getElementById("qualityStatsGrid").classList.add("d-none");
@@ -2652,14 +2723,16 @@
             .then(function (criteria) {
                 var listEl = document.getElementById("criteriaList");
                 listEl.innerHTML = "";
-                criteria.forEach(function (c, i) {
-                    listEl.innerHTML += '<div class="criteria-item mb-2 p-2 border rounded">' +
-                        '<input class="form-control form-control-sm mb-1 criteria-name" value="' + escapeHtml(c.name) + '" placeholder="Criterion name">' +
-                        '<input class="form-control form-control-sm mb-1 criteria-desc" value="' + escapeHtml(c.description) + '" placeholder="Description">' +
-                        '<div class="d-flex gap-2"><input type="number" class="form-control form-control-sm criteria-weight" value="' + c.weight + '" min="1" max="10" placeholder="Weight">' +
-                        '<input type="number" class="form-control form-control-sm criteria-min" value="' + c.minimumPassingScore + '" min="1" max="5" step="0.5" placeholder="Min score"></div></div>';
+                criteria.forEach(function (c) {
+                    listEl.appendChild(createCriteriaItem(c));
                 });
+                validateCriteriaEditor();
             });
+    });
+
+    document.getElementById("addCriteriaBtn").addEventListener("click", function () {
+        document.getElementById("criteriaList").appendChild(createCriteriaItem());
+        validateCriteriaEditor();
     });
 
     document.getElementById("closeCriteriaBtn").addEventListener("click", function () {
@@ -2669,22 +2742,27 @@
     });
 
     document.getElementById("saveCriteriaBtn").addEventListener("click", function () {
-        var criteria = [];
-        document.querySelectorAll(".criteria-item").forEach(function (item) {
-            criteria.push({
-                name: item.querySelector(".criteria-name").value,
-                description: item.querySelector(".criteria-desc").value,
-                weight: parseInt(item.querySelector(".criteria-weight").value) || 5,
-                minimumPassingScore: parseFloat(item.querySelector(".criteria-min").value) || 3
-            });
-        });
+        var errors = validateCriteriaEditor();
+        if (errors.length) return;
+
+        var criteria = collectQualityCriteria();
         fetch(apiBaseUrl() + "/api/quality/criteria", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(criteria)
+        }).then(function (r) {
+            if (!r.ok) {
+                return r.json().then(function (body) {
+                    var message = (body.errors && body.errors[0]) || body.error || "Failed to save criteria";
+                    throw new Error(message);
+                });
+            }
+            return r.json();
         }).then(function () {
             document.getElementById("closeCriteriaBtn").click();
             showToast("Criteria saved", "success");
+        }).catch(function (err) {
+            showToast(err.message || "Failed to save criteria", "error");
         });
     });
 

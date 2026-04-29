@@ -17,9 +17,9 @@ namespace ContactCenterPOC.Services
 
         private static readonly List<QualityCriterion> DefaultCriteria = new()
         {
-            new() { Name = "Greeting Quality", Description = "How well did the agent greet the customer?", Weight = 5, MinimumPassingScore = 3.0f },
-            new() { Name = "Issue Resolution", Description = "Was the customer's issue addressed effectively?", Weight = 8, MinimumPassingScore = 3.5f },
-            new() { Name = "Communication Clarity", Description = "Was the agent's communication clear and professional?", Weight = 5, MinimumPassingScore = 3.0f }
+            new() { Name = "Greeting Quality", Description = "How well did the agent greet the customer?", Weight = 30, MinimumPassingScore = 3.0f },
+            new() { Name = "Issue Resolution", Description = "Was the customer's issue addressed effectively?", Weight = 40, MinimumPassingScore = 3.5f },
+            new() { Name = "Communication Clarity", Description = "Was the agent's communication clear and professional?", Weight = 30, MinimumPassingScore = 3.0f }
         };
 
         public QualityEvaluationService(

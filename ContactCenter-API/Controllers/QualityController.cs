@@ -61,8 +61,38 @@ namespace ContactCenterPOC.Controllers
             if (criteria == null || criteria.Count == 0)
                 return BadRequest(new { error = "At least one criterion is required" });
 
+            var validationErrors = ValidateCriteria(criteria);
+            if (validationErrors.Count > 0)
+                return BadRequest(new { errors = validationErrors });
+
             var updated = await _qualityService.UpdateCriteriaAsync(criteria);
             return Ok(updated);
+        }
+
+        internal static List<string> ValidateCriteria(List<QualityCriterion> criteria)
+        {
+            var errors = new List<string>();
+
+            for (var i = 0; i < criteria.Count; i++)
+            {
+                var criterion = criteria[i];
+                var label = string.IsNullOrWhiteSpace(criterion.Name) ? $"Criterion {i + 1}" : criterion.Name;
+
+                if (string.IsNullOrWhiteSpace(criterion.Name))
+                    errors.Add($"Criterion {i + 1} requires a name.");
+
+                if (criterion.Weight < 1 || criterion.Weight > 100)
+                    errors.Add($"{label} weight must be between 1% and 100%.");
+
+                if (criterion.MinimumPassingScore < 1f || criterion.MinimumPassingScore > 5f)
+                    errors.Add($"{label} minimum passing score must be between 1.0 and 5.0.");
+            }
+
+            var totalWeight = criteria.Sum(c => c.Weight);
+            if (totalWeight > 100)
+                errors.Add($"Total quality criteria weight must be 100% or less. Current total is {totalWeight}%.");
+
+            return errors;
         }
 
         [HttpPost("batch-evaluate")]

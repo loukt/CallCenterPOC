@@ -219,6 +219,13 @@ AppPackages/
 BundleArtifacts/
 Package.StoreAssociation.xml
 
+# Universal/editor/local environment files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.env*
+
 # Universal local/editor files
 .DS_Store
 Thumbs.db

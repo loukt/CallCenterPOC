@@ -85,9 +85,9 @@ namespace ContactCenterPOC.Services
             {
                 return await foundryAction();
             }
-            catch (Exception ex) when (IsFoundryUnavailable(ex))
+            catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Foundry agent {Agent} unavailable, falling back to in-process service", agentName);
+                _logger.LogWarning(ex, "Foundry agent {Agent} failed, falling back to in-process service", agentName);
                 return await fallbackAction();
             }
         }
@@ -214,8 +214,7 @@ namespace ContactCenterPOC.Services
 
                     if (currentRun.Status.IsTerminal)
                     {
-                        _logger.LogWarning("Agent {Name} run ended with status {Status}", agentName, currentRun.Status);
-                        return null;
+                        throw new InvalidOperationException($"Agent {agentName} run ended with status {currentRun.Status}");
                     }
 
                     if (currentRun.Status == RunStatus.RequiresAction)
@@ -248,10 +247,7 @@ namespace ContactCenterPOC.Services
                     }
                 }
 
-                if (iterations >= MaxToolCallIterations)
-                    _logger.LogWarning("Agent {Name} hit max tool call iterations ({Max})", agentName, MaxToolCallIterations);
-
-                return null;
+                throw new InvalidOperationException($"Agent {agentName} hit max tool call iterations ({MaxToolCallIterations})");
             }
             finally
             {
@@ -514,6 +510,8 @@ namespace ContactCenterPOC.Services
                 total = 5
             });
 
+            var completed = false;
+
             try
             {
                 await ExecuteWithFallbackAsync(
@@ -544,6 +542,11 @@ namespace ContactCenterPOC.Services
                             userMessage,
                             _postCallReviewTools.DispatchToolCallAsync);
 
+                        if (_postCallReviewTools.CompletedCount == 0)
+                        {
+                            throw new InvalidOperationException("PostCallReview agent completed without invoking any post-call tools.");
+                        }
+
                         await _agentActivityService.LogActivityAsync("PostCallReview", "OrchestratorComplete",
                             AgentActionResult.Success,
                             $"Foundry agent completed post-call review", callId);
@@ -557,31 +560,42 @@ namespace ContactCenterPOC.Services
                         await RunBatchAnalysisAsync(callRecord, hubContext);
                         return true;
                     });
+
+                completed = true;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "PostCallReview orchestrator failed for {CallId}", callId);
+                await _agentActivityService.LogActivityAsync("PostCallReview", "OrchestratorFailed",
+                    AgentActionResult.Failure, ex.Message, callId);
+                await hubContext.Clients.Group(callId).SendAsync("AgentProcessingUpdate", new
+                {
+                    callConnectionId = callId,
+                    agentName = "all",
+                    agentLabel = "All Agents",
+                    status = "failed",
+                    progress = 100,
+                    index = 5,
+                    total = 5,
+                    error = ex.Message
+                });
+                return;
             }
 
             // Send completion event
-            await hubContext.Clients.Group(callId).SendAsync("AgentProcessingUpdate", new
+            if (completed)
             {
-                callConnectionId = callId,
-                agentName = "all",
-                agentLabel = "All Agents",
-                status = "complete",
-                progress = 100,
-                index = 5,
-                total = 5
-            });
-        }
-
-        private static bool IsFoundryUnavailable(Exception ex)
-        {
-            return ex is Azure.RequestFailedException rfe && (rfe.Status >= 500 || rfe.Status == 429)
-                || ex is TimeoutException
-                || ex is TaskCanceledException
-                || ex is HttpRequestException;
+                await hubContext.Clients.Group(callId).SendAsync("AgentProcessingUpdate", new
+                {
+                    callConnectionId = callId,
+                    agentName = "all",
+                    agentLabel = "All Agents",
+                    status = "complete",
+                    progress = 100,
+                    index = 5,
+                    total = 5
+                });
+            }
         }
 
         #region Agent Instructions

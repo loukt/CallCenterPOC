@@ -47,7 +47,7 @@ namespace ContactCenterPOC.Services.Tools
             return new List<AgentToolDefinition>
             {
                 new("get_quality_criteria",
-                    "Get quality evaluation criteria with weights and passing scores",
+                    "Get quality evaluation criteria with percentage weights and minimum passing scores on a 1.0 to 5.0 scale",
                     """{"type":"object","properties":{}}"""),
                 new("save_evaluation",
                     "Save quality evaluation scores for a call",

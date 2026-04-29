@@ -33,6 +33,8 @@ namespace ContactCenterPOC.Services.Tools
 
         private int _completedCount = 0;
 
+        internal int CompletedCount => _completedCount;
+
         public PostCallReviewAgentTools(
             IServiceProvider serviceProvider,
             CallHistoryService callHistoryService,
